@@ -1,0 +1,5 @@
+#! /bin/bash
+
+set -eo pipefail
+
+ciaover | perl -le '@l=<>; print "ciao".+(split '"' '"', $l[0])[1]."_caldb".+(split '"' '"', $l[2])[2]'

@@ -1,0 +1,30 @@
+#! /bin/bash
+
+set -eo pipefail
+
+indirs="$@"
+
+SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+. $SCRIPTDIR/process_epoch_functions.sh
+
+. ~/.bash_aliases
+shopt -s expand_aliases nocasematch
+
+#
+# CIAO init doesn't work with bash nounset mode
+#
+reset_u=0
+[[ $- =~ u ]] && {
+    set +u
+    reset_u=1
+}
+ciao -o
+[ $reset_u -eq 1 ] && set -u
+
+. $SCRIPTDIR/tmppdir.sh
+
+for dir in $indirs; do
+    mkdir -p "$dir/repro"
+    bash -xc ". '$SCRIPTDIR'/process_epoch_functions.sh; process_obsid '$dir'" 2>&1 | tee "$dir/repro/repro.log"
+done

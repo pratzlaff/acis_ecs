@@ -1,0 +1,21 @@
+#! /bin/bash
+
+set -eo pipefail
+
+. ~/.bash_aliases
+shopt -s expand_aliases nocasematch
+
+ciao
+
+rm -rf /data/legs/rpete/data/ECS/fits
+srcdir=/data/legs/rpete/flight/acis_ecs/src/
+
+sname=s02_fits
+screen -dmS $sname
+for e in $(seq 87 101); do
+    e=$(printf %03d $((10#"$e")))
+    screen -S $sname -X screen bash -c "python $srcdir/s02_fit_fullmdl_smpl_lorentz_nobkglines.py e$e 120118 yes 256256; #exec bash"
+done
+# wait until all of the screens are done
+screen -S $sname -p0 -X kill
+screen -rS $sname

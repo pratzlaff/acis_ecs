@@ -1,0 +1,42 @@
+#! /bin/bash
+
+set -eo pipefail
+
+epochs="$@"
+
+basedir=/data/legs/rpete/data/ECS
+
+SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+. ~/.bash_aliases
+shopt -s expand_aliases nocasematch
+
+#
+# CIAO init doesn't work with bash nounset mode
+#
+reset_u=0
+[[ $- =~ u ]] && {
+    set +u
+    reset_u=1
+}
+ciao -o
+[ $reset_u -eq 1 ] && set -u
+
+. $SCRIPTDIR/tmppdir.sh
+
+for epoch in $epochs; do
+    epoch=$(printf %d $((10#"$epoch")))
+    epoch_str=$(printf %03d $((10#"$epoch")))
+
+    edir="$basedir/e$epoch_str"
+    echo -e "\n*** Downloading epoch $epoch_str to $edir ***\n"
+
+    mkdir -p "$edir"
+    cd "$edir"
+
+    rsync -av localhost:/home/rpete/hal9000/ecs/data/e$epoch/support .
+
+    while read obsid; do
+	download_chandra_obsid $obsid mtl,msk,stat,flt,evt1,pbk,bias
+    done < support/obsids.dat
+done
