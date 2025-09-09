@@ -2,12 +2,17 @@
 
 set -eo pipefail
 
+# fits dir is /data/legs/rpete/data/ECS/e${epoch}/fits/$ECSID/fits
+[ -z "$ECSID" ] && {
+    \echo "\$ECSID is not set, exiting" 1>&2
+    exit 1
+}
+
 [ $# -ge 1 ] || {
     echo "Usage: $0 epoch1 epoch2 ..." 1>&2
     exit 1
 }
 epochs="$@"
-
 
 . ~/.bash_aliases
 shopt -s expand_aliases nocasematch
@@ -19,16 +24,18 @@ srcdir=/data/legs/rpete/flight/acis_ecs/src/
 true && {
     for epoch in $epochs; do
 	epoch=$(printf %03d $((10#"$epoch")))
-	rm -rf /data/legs/rpete/data/ECS/e$epoch/fits/fits
+	rm -rf "/data/legs/rpete/data/ECS/e$epoch/fits/$ECSID/fits"
 	for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
 	    echo $epoch $ccd
 	done
     done | parallel -j 16 --colsep ' ' python $srcdir/fit_spectra.py 120,119,118 yes 256 256
-} || {
+}
+
+false && {
     sname=fit_epochs_parallel_ccd #_$(tr -dc A-Za-z0-9 </dev/urandom | head -c 6; echo)
     for epoch in $epochs; do
 	epoch=$(printf %03d $((10#"$epoch")))
-	rm -rf /data/legs/rpete/data/ECS/e$epoch/fits/fits
+	rm -rf /data/legs/rpete/data/ECS/e$epoch/fits/$ECSID/fits
 	screen -dmS $sname
 	for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
 	    screen -S $sname -X screen bash -c "python $srcdir/fit_spectra.py 120,119,118 yes 256 256 $epoch $ccd; #exec bash"

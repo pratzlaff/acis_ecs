@@ -139,7 +139,7 @@ logger.setLevel(logging.INFO)
 from tempfile import TemporaryDirectory as mktempdir
 tdir_tmp= mktempdir(dir='.'); tdir= tdir_tmp.name
 os.environ['PFILES']='{};/usr/local/ciao/contrib/param:/usr/local/ciao/param:'.format(tdir)
-lookuptab= '/data/legs/rpete/flight/acis_ecs/data/s999_dmmerge.txt'
+lookuptab= '/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt'
 
 
 ## read obsid list

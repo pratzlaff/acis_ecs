@@ -1,0 +1,42 @@
+#! /bin/bash
+
+
+set -eo pipefail
+
+[ -z "$ECSID" ] && {
+    \echo "\$ECSID is not set, exiting" 1>&2
+    exit 1
+}
+
+[ $# -ge 4 ] || {
+    \echo "Usage: $0 t1,t2,... apply_tgain binx biny [epoch1 epoch2 ...]" 1>&2
+    exit 1
+}
+
+tstr="$1"
+shift
+apply_tgain="$1"
+shift
+binx="$1"
+shift
+biny="$1"
+shift
+epochs="$@"
+
+SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+extract_spectra="$SCRIPTDIR/extract_spectra"
+
+. /data/legs/rpete/flight/analysis_functions/util.bash
+
+sname=extract_spectra
+n=16
+
+screen -dmS $sname
+
+for i in $(seq $n); do
+    screen -S $sname -X screen bash -c "$extract_spectra $tstr $apply_tgain $binx $biny $(i_of_n $i $n $epochs); #exec bash"
+done
+# wait until all of the screens are done
+screen -S $sname -p0 -X kill
+screen -rS $sname

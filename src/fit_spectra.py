@@ -1,8 +1,14 @@
 import argparse
+import os
 import sys
 # if len(sys.argv) != 7: sys.exit('\nUsage: python *.py epoch ccd fp_temp[see script opts] yes/no[TG] binx biny\n\n')
 # (sname,e,ccd,fptv,tg,binx,biny)= sys.argv
 # e=f'{int(e):03d}'
+
+if 'ECSID' not in os.environ:
+    sys.stderr.write("no ECSID environment variable, exiting\n")
+    os.exit(0)
+ecsid=os.environ['ECSID']
 
 ###### Editable ######################################
 
@@ -65,7 +71,6 @@ import numpy as np
 from glob import glob
 from astropy.time import Time as timetime
 from astropy.io.fits import open as astro_open
-import os
 from tempfile import TemporaryDirectory as mktempdir
 import shutil
 
@@ -140,12 +145,16 @@ def do_fit(args):
     basedir = '/data/legs/rpete/data/ECS'
     tstr = args.temps.replace(',', '-')
     sfpt = tstr
-    spec_dir = f'{basedir}/e{e}/fits/spec/fpt_{tstr}_{xbin}x{ybin}y_{tg}TG/'
-    fit_dir= f'{basedir}/e{e}/fits/fits/fpt_{tstr}_{xbin}x{ybin}y_{tg}TG/'
+    spec_dir = f'{basedir}/e{e}/fits/{ecsid}/spec/fpt_{tstr}_{xbin}x{ybin}y_{tg}TG/'
+    fit_dir= f'{basedir}/e{e}/fits/{ecsid}/fits/fpt_{tstr}_{xbin}x{ybin}y_{tg}TG/'
     plt_dir= f'{fit_dir}/figs/'
 
     if not os.path.exists(spec_dir): sys.exit('\n\nspec_dir does not exist \n\t{}\n'.format(spec_dir))
-    if not os.path.exists(plt_dir) and not test: os.makedirs(plt_dir)
+    if not os.path.exists(plt_dir) and not test:
+        try:
+            os.makedirs(plt_dir)
+        except:
+            pass
 
     ############ plot block
     def plt_me():

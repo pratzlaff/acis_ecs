@@ -5,27 +5,30 @@
 
 set -eo pipefail
 
-[ $# -eq 5 ] || {
-    \echo "Usage: $0 t1,t2,... apply_tgain binx biny epoch" 1>&2
+# fits dir is /data/legs/rpete/data/ECS/e${epoch}/fits/$ECSID
+[ -z "$ECSID" ] && {
+    \echo "\$ECSID is not set, exiting" 1>&2
+    exit 1
+}
+
+[ $# -ge 4 ] || {
+    \echo "Usage: $0 t1,t2,... apply_tgain binx biny [epoch1 epoch2 ...]" 1>&2
     exit 1
 }
 
 temps=$(sed 's/,/ /g' <<<"$1")
 tstr=$(sed 's/,/-/g' <<<"$1")
-apply_tgain="$2"
-binx="$3"
-biny="$4"
-epoch=$(printf %03d $((10#"$5")))
-
-basedir=/data/legs/rpete/data/ECS/e${epoch}
-outdir=${basedir}/fits
-
-merge_dir="$outdir/evt2/fpt_${tstr}"
-merge_lis_dir="$merge_dir/merge_lis"
-mkdir -p "$merge_lis_dir"
+shift
+apply_tgain="$1"
+shift
+binx="$1"
+shift
+biny="$1"
+shift
+epochs="$@"
 
 . ~/.bash_aliases
-shopt -s expand_aliases nocasematch
+shopt -s expand_aliases extglob nocasematch
 
 #
 # CIAO init doesn't work with bash nounset mode
@@ -41,49 +44,71 @@ ciao -o
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 . $SCRIPTDIR/tmppdir.sh
 
-for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
-    merge_list="$merge_lis_dir/merge_${ccd}_${apply_tgain}TG.lis"
-    rm -f "$merge_list"
-    evt2_out="${merge_dir}/${ccd}_${apply_tgain}TG.evt2"
-    for t in $temps; do
-	s=
-	[[ $ccd =~ noCTI ]] && s=noCTI
-	evt2_add="${basedir}/merge/e${epoch}_${ccd:0:2}_${apply_tgain}TG${s}_${t}.evt2"
-	[ -f "$evt2_add" ] || {
-	    echo not found "$evt2_add"
-	    continue
-	}
-	echo "$evt2_add" >> "$merge_list"
-    done
-    [ -f  "$merge_list" ] || continue
-    dmmerge \
-	"@${merge_list}[cols -phas,-node_id][subspace -expno]" \
-	"$evt2_out" \
-	lookupTab=/data/legs/rpete/flight/acis_ecs/data/s999_dmmerge.txt \
-	cl+
-    #rm -f "$merge_list"
-done
+extract_spectra() {
+    [ $# -eq 1 ] || {
+	echo Usage: extract_spectra epoch 1>&2
+	return 1
+    }
 
-spec_dir="$outdir/spec/fpt_${tstr}_${binx}x${biny}y_${apply_tgain}TG"
-mkdir -p "${spec_dir}"
-for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
-    evt="${merge_dir}/${ccd}_${apply_tgain}TG.evt2"
-    [ -f "$evt" ] || continue
-    for x in $(seq 1 $binx 1024); do
-	xl=$(printf %04d $x)
-	xh=$(printf %04d $(( x+binx-1 )))
-	for y in $(seq 1 $biny 1024); do
-	    yl=$(printf %04d $y)
-	    yh=$(printf %04d $(( y+biny-1 )))
-	    inf="${evt}[chipx=${xl}:${xh},chipy=${yl}:${yh}][cols time]"
-	    punlearn dmstat
-	    dmstat "$inf" 1>/dev/null
-	    [ $(pget dmstat out_good) -gt 300 ] && {
-		inf="${evt}[chipx=${xl}:${xh},chipy=${yl}:${yh}][bin pi=1:1024:1]"
-		outf="${spec_dir}/${ccd}_${xl}-${xh}x_${yl}-${yh}y.pi"
-		punlearn dmextract
-		dmextract "$inf" "$outf" cl+
+    local epoch=$(printf %03d $((10#"$1")))
+    local basedir=/data/legs/rpete/data/ECS/e${epoch}
+    local outdir="${basedir}/fits/${ECSID}"
+    local merge_indir="${basedir}/merge/${ECSID}"
+    local merge_outdir="$outdir/evt2/fpt_${tstr}"
+    local merge_lis_outdir="$merge_outdir/merge_lis"
+    mkdir -p "$merge_lis_outdir"
+
+
+    for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
+	merge_list="$merge_lis_outdir/merge_${ccd}_${apply_tgain}TG.lis"
+	rm -f "$merge_list"
+	evt2_out="${merge_outdir}/${ccd}_${apply_tgain}TG.evt2"
+	for t in $temps; do
+	    s=
+	    [[ $ccd =~ noCTI ]] && s=noCTI
+	    evt2_add="${merge_indir}/e${epoch}_${ccd:0:2}_${apply_tgain}TG${s}_${t}.evt2"
+	    [ -f "$evt2_add"?(.gz) ] || {
+		echo not found "$evt2_add"?(.gz)
+		continue
 	    }
+	    echo "$evt2_add"?(.gz) >> "$merge_list"
+	done
+	[ -f  "$merge_list" ] || continue
+	dmmerge \
+	    "@${merge_list}[cols -phas,-node_id][subspace -expno]" \
+	    "$evt2_out" \
+	    lookupTab=/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt \
+	    cl+
+	#rm -f "$merge_list"
+    done
+
+    spec_dir="$outdir/spec/fpt_${tstr}_${binx}x${biny}y_${apply_tgain}TG"
+    mkdir -p "${spec_dir}"
+    for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
+	evt="${merge_outdir}/${ccd}_${apply_tgain}TG.evt2"
+	echo $evt
+	[ -f "$evt" ] || continue
+	for x in $(seq 1 $binx 1024); do
+	    xl=$(printf %04d $x)
+	    xh=$(printf %04d $(( x+binx-1 )))
+	    for y in $(seq 1 $biny 1024); do
+		yl=$(printf %04d $y)
+		yh=$(printf %04d $(( y+biny-1 )))
+		inf="${evt}[chipx=${xl}:${xh},chipy=${yl}:${yh}][cols time]"
+		punlearn dmstat
+		dmstat "$inf" 1>/dev/null
+		[ $(pget dmstat out_good) -gt 300 ] && {
+		    inf="${evt}[chipx=${xl}:${xh},chipy=${yl}:${yh}][bin pi=1:1024:1]"
+		    outf="${spec_dir}/${ccd}_${xl}-${xh}x_${yl}-${yh}y.pi"
+		    punlearn dmextract
+		    dmextract "$inf" "$outf" cl+
+		}
+	    done
 	done
     done
+}
+
+for epoch in $epochs; do
+    extract_spectra $epoch
 done
+

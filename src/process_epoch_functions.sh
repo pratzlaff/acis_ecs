@@ -1,6 +1,7 @@
 #! /bin/bash
 
 datadir=/data/legs/rpete/data/ECS
+lookuptab=/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt
 
 # given year/month, return the epoch number
 epoch() {
@@ -151,6 +152,7 @@ process_obsid() {
     for fstr in "${!ape_opts[@]}"; do
 	ape_opt=${ape_opts["$fstr"]}
 	ape_infile=${ape_infiles["$fstr"]}
+	#ape_infile="$dstrk"
 	ape="$outdir/${obsid}_${fstr}.ape"
 
         #logtool(['acis_process_events', 'infile='+ape_inf, 'outfile='+ape, 'badpixfile='+bpix, 'acaofffile=NONE', 'mtlfile='+mtl, 'apply_cti='+appcti, 'apply_tgain='+tg, 'ctifile='+cti_file, 'tgainfile='+tg_file, 'check_vf_pha=no', 'stop=tdet', 'pix_adj=NONE', 'eventdef={d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}'], silent=0, log=1)
@@ -401,7 +403,6 @@ merge_epoch_old() {
     }
     local outdir="$1"
     local e=$(printf %03d $((10#"$2")))
-    local lookuptab=/data/legs/rpete/flight/acis_ecs/data/s999_dmmerge.txt
 
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	for t in $(seq 101 120); do
@@ -443,15 +444,13 @@ merge_epoch() {
     }
     local outdir="$1"
     local e=$(printf %03d $((10#"$2")))
-    local lookuptab=/data/legs/rpete/flight/acis_ecs/data/s999_dmmerge.txt
 
     mkdir -p "$outdir/merge_lis"
     cd "$outdir"
 
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	for t in $(seq 101 120); do
-	    fstrs='noTG yesTG'
-	    [[ $ccd =~ s[13] ]] && fstrs+=' noTGnoCTI yesTGnoCTI'
+	    fstrs='noTG yesTG noTGnoCTI yesTGnoCTI'
 	    for fstr in $fstrs; do
 		outf="e${e}_${ccd}_${fstr}_${t}.evt2"
 		globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${fstr}_${t}_${ccd}.evt2"
@@ -515,12 +514,18 @@ cmp_datasum() {
 }
 
 cmp_fits() {
+    # fits dir is /data/legs/rpete/data/ECS/e${epoch}/fits/$ECSID/fits
+    [ -z "$ECSID" ] && {
+	\echo "\$ECSID is not set, exiting" 1>&2
+	return 1
+    }
+
     [ $# -eq 1 ] || {
 	echo "Usage: $0 epoch" 1>&2
 	return 1
     }
     local epoch=$(printf %03d "$1")
-    for f in "$datadir/e$epoch/fits/fits/fpt_120-119-118_256x256y_yesTG"/*.txt; do
+    for f in "$datadir/e$epoch/fits/$ECSID/fits/fpt_120-119-118_256x256y_yesTG"/*.txt; do
 	bname=$(basename "$f")
 	\diff -u \
 	     $f \
@@ -528,5 +533,20 @@ cmp_fits() {
 	\diff -u \
 	     "$datadir/fits/e$epoch/fpt_120-119-118_256x256y_yesTG/$bname" \
 	     $f
+    done
+}
+
+link_new_old() {
+    base=/data/legs/rpete/data/ECS
+    ciao=ciao4.17.0_caldb4.12.2
+    epochs="$@"
+    for epoch in $epochs; do
+	epoch=e$(printf %03d $((10#$epoch)))
+	for d1 in evt2 spec fits; do
+	    for d2 in $base/$d1/$ciao/$epoch/fpt_120-119-118*; do
+		bname=$(basename $d2)
+		echo ln -fsT $base/$epoch/fits/$ciao/$d1/$bname $base/$d1/$ciao/$epoch/$bname
+	    done
+	done
     done
 }

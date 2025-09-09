@@ -112,7 +112,7 @@ def do_merge(e_list):
     pdir_tmp= mktempdir(dir='.', ignore_cleanup_errors=True)
     pdir= pdir_tmp.name
     os.environ["PFILES"]="{};/usr/local/ciao/contrib/param:/usr/local/ciao/param:".format(pdir)
-    ltab= '/data/legs/rpete/flight/acis_ecs/data/s999_dmmerge.txt'
+    ltab= '/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt'
     merge_dir= '{}/evt2/{}/fpt_{}{}/'.format(basedir,ename,sfpt,xtra)
     if not os.path.exists(merge_dir): os.makedirs(merge_dir)
     os.chdir(merge_dir)
