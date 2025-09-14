@@ -67,8 +67,6 @@ process_obsid() {
     local outdir="$indir/repro"
     mkdir -p "$outdir"
 
-    shopt -s extglob
-
     local evt1=$(\ls "$indir"/secondary/*evt1.fits*)
     local mtl=$(\ls "$indir"/secondary/*mtl1.fits*)
     local msk=$(\ls "$indir"/secondary/*msk1.fits*)
