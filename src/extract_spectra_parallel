@@ -21,22 +21,12 @@ binx="$1"
 shift
 biny="$1"
 shift
+
 epochs="$@"
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 extract_spectra="$SCRIPTDIR/extract_spectra"
 
-. /data/legs/rpete/flight/analysis_functions/util.bash
+parallel -j 16 $extract_spectra $tstr $apply_tgain $binx $biny ::: $epochs
 
-sname=extract_spectra
-n=16
-
-screen -dmS $sname
-
-for i in $(seq $n); do
-    screen -S $sname -X screen bash -c "$extract_spectra $tstr $apply_tgain $binx $biny $(i_of_n $i $n $epochs); #exec bash"
-done
-# wait until all of the screens are done
-screen -S $sname -p0 -X kill
-screen -rS $sname

@@ -1,0 +1,41 @@
+#! /bin/bash
+
+set -eo pipefail
+
+[ -z "$ECSID" ] && {
+    \echo "\$ECSID is not set, exiting" 1>&2
+    exit 1
+}
+
+[ $# -eq 1 ] || {
+    echo "Usage $0: epoch" 1>&2
+    exit 1
+}
+
+epoch=$(printf %03d $((10#"$1")))
+
+SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+. "$SCRIPTDIR/process_epoch_functions.sh"
+
+. ~/.bash_aliases
+shopt -s expand_aliases nocasematch
+
+#
+# CIAO init doesn't work with bash nounset mode
+#
+reset_u=0
+[[ $- =~ u ]] && {
+    set +u
+    reset_u=1
+}
+ciao -o
+[ $reset_u -eq 1 ] && set -u
+
+. $SCRIPTDIR/tmppdir.sh
+
+outdir=/data/legs/rpete/data/ECS/e$epoch/merge/"$ECSID"
+rm -rf "$outdir"
+mkdir -p "$outdir"
+merge_epoch "$outdir" "$epoch" 2>&1 | tee "$outdir"/merge.log
+
+rm -rf /data/legs/rpete/data/ECS/e$epoch/*/repro

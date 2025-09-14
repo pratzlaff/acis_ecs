@@ -11,57 +11,14 @@ set -eo pipefail
     exit 1
 }
 
-[ $# -ge 1 ] || {
-    \echo "Usage: $0 epoch1 epoch2 ..." 1>&2
-    exit 1
-}
-
 epochs="$@"
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-. ~/.bash_aliases
-shopt -s expand_aliases
-
-#
-# CIAO init doesn't work with bash nounset mode
-#
-reset_u=0
-[[ $- =~ u ]] && {
-    set +u
-    reset_u=1
-}
-ciao -o
-[ $reset_u -eq 1 ] && set -u
-
-. $SCRIPTDIR/tmppdir.sh
-
 process_obsids="$SCRIPTDIR/process_obsids"
 
-. /data/legs/rpete/flight/analysis_functions/util.bash
+eglob=$(perl -le 'print("{", join(",", map { sprintf "%03d", $_ } @ARGV),"}");' $epochs)
+indirs=$(bash -c 'echo '/data/legs/rpete/data/ECS/e$eglob/[0-9][0-9][0-9][0-9][0-9])
+echo $indirs
 
-sname=process_epoch
-n=32
-
-for epoch in $epochs; do
-    epoch=$(printf %03d $((10#"$epoch")))
-
-    outdir=/data/legs/rpete/data/ECS/e$epoch/merge/"$ECSID"
-    rm -rf "$outdir"
-    mkdir -p "$outdir"
-
-    indirs=/data/legs/rpete/data/ECS/e$epoch/[0-9][0-9][0-9][0-9][0-9]
-    rm -rf $indirs/repro
-
-    screen -dmS $sname
-    for i in $(seq $n); do
-	screen -S $sname -X screen bash -c "$process_obsids $(i_of_n $i $n $indirs); #exec bash"
-    done
-    # wait until all of the screens are done
-    screen -S $sname -p0 -X kill
-    screen -rS $sname
-    bash -xc ". '$SCRIPTDIR'/process_epoch_functions.sh; merge_epoch '$outdir' $epoch" 2>&1 | tee "$outdir"/merge.log
-
-    rm -rf /data/legs/rpete/data/ECS/e$epoch/*/repro
-
-done
+parallel -j 32 "$process_obsids" ::: $indirs

@@ -30,6 +30,7 @@ xtra=''; xtra_label='CALDB'
 
 
 fpt='120-119-118'
+fpt='107-106'
 estart=87
 e_list= np.arange(estart,101+1)
 
@@ -197,7 +198,7 @@ for ccd in ccd_list:
         for i,e in enumerate(e_list):
             e_date= date_list[i]
             ## grab Al/Mn
-            inf= '/data/legs/rpete/data/ECS/fits/e{}/fpt_{}_256x256y_yesTG{}/{}_ecs.txt'.format(e,fpt,xtra,ccd)
+            inf= f'/data/legs/rpete/data/ECS/e{e:03d}/fits/test/fits/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
             if os.path.exists(inf):
                 (xl_tmp,yl_tmp,al,al_lo,al_hi,mn,mn_lo,mn_hi)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21])
 

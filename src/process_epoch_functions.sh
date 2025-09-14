@@ -529,9 +529,9 @@ cmp_fits() {
 	bname=$(basename "$f")
 	\diff -u \
 	     $f \
-	     "$datadir/fits/e$epoch/fpt_120-119-118_256x256y_yesTG/$bname"
+	     "$datadir/fits/ciao4.17.0_caldb4.12.2/e$epoch/fpt_120-119-118_256x256y_yesTG/$bname"
 	\diff -u \
-	     "$datadir/fits/e$epoch/fpt_120-119-118_256x256y_yesTG/$bname" \
+	     "$datadir/fits/ciao4.17.0_caldb4.12.2/e$epoch/fpt_120-119-118_256x256y_yesTG/$bname" \
 	     $f
     done
 }

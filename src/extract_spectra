@@ -26,6 +26,7 @@ shift
 biny="$1"
 shift
 epochs="$@"
+echo $epochs
 
 . ~/.bash_aliases
 shopt -s expand_aliases extglob nocasematch
@@ -56,38 +57,41 @@ extract_spectra() {
     local merge_indir="${basedir}/merge/${ECSID}"
     local merge_outdir="$outdir/evt2/fpt_${tstr}"
     local merge_lis_outdir="$merge_outdir/merge_lis"
-    mkdir -p "$merge_lis_outdir"
-
-
-    for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
-	merge_list="$merge_lis_outdir/merge_${ccd}_${apply_tgain}TG.lis"
-	rm -f "$merge_list"
-	evt2_out="${merge_outdir}/${ccd}_${apply_tgain}TG.evt2"
-	for t in $temps; do
-	    s=
-	    [[ $ccd =~ noCTI ]] && s=noCTI
-	    evt2_add="${merge_indir}/e${epoch}_${ccd:0:2}_${apply_tgain}TG${s}_${t}.evt2"
-	    [ -f "$evt2_add"?(.gz) ] || {
-		echo not found "$evt2_add"?(.gz)
-		continue
-	    }
-	    echo "$evt2_add"?(.gz) >> "$merge_list"
+    
+    # might have already merged this epoch's evt2 for this temperature range
+    [ -d "$merge_outdir" ] || {
+	mkdir -p "$merge_lis_outdir"
+	for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
+	    merge_list="$merge_lis_outdir/merge_${ccd}_${apply_tgain}TG.lis"
+	    rm -f "$merge_list"
+	    evt2_out="${merge_outdir}/${ccd}_${apply_tgain}TG.evt2"
+	    for t in $temps; do
+		s=
+		[[ $ccd =~ noCTI ]] && s=noCTI
+		evt2_add="${merge_indir}/e${epoch}_${ccd:0:2}_${apply_tgain}TG${s}_${t}.evt2"
+		[ -f "$evt2_add"?(.gz) ] || {
+		    echo not found "$evt2_add"?(.gz)
+		    continue
+		}
+		echo "$evt2_add"?(.gz) >> "$merge_list"
+	    done
+	    [ -f  "$merge_list" ] || continue
+	    dmmerge \
+		"@${merge_list}[cols -phas,-node_id][subspace -expno]" \
+		"$evt2_out" \
+		lookupTab=/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt \
+		cl+
+	    #rm -f "$merge_list"
 	done
-	[ -f  "$merge_list" ] || continue
-	dmmerge \
-	    "@${merge_list}[cols -phas,-node_id][subspace -expno]" \
-	    "$evt2_out" \
-	    lookupTab=/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt \
-	    cl+
-	#rm -f "$merge_list"
-    done
+    }
 
     spec_dir="$outdir/spec/fpt_${tstr}_${binx}x${biny}y_${apply_tgain}TG"
-    mkdir -p "${spec_dir}"
+    rm -rf "$spec_dir"
+    mkdir -p "$spec_dir"
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
 	evt="${merge_outdir}/${ccd}_${apply_tgain}TG.evt2"
-	echo $evt
 	[ -f "$evt" ] || continue
+	echo extracting from $evt
 	for x in $(seq 1 $binx 1024); do
 	    xl=$(printf %04d $x)
 	    xh=$(printf %04d $(( x+binx-1 )))
@@ -106,6 +110,7 @@ extract_spectra() {
 	    done
 	done
     done
+    return 0
 }
 
 for epoch in $epochs; do

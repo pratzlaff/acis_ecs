@@ -1,0 +1,16 @@
+#! /bin/bash
+
+set -eo pipefail
+
+[ -z "$ECSID" ] && {
+    \echo "\$ECSID is not set, exiting" 1>&2
+    exit 1
+}
+
+epochs="$@"
+
+SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+merge_epoch="$SCRIPTDIR/merge_epoch"
+
+parallel -j 32 "$merge_epoch" ::: $epochs
