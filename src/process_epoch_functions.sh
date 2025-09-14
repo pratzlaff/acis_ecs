@@ -79,7 +79,6 @@ process_obsid() {
 
     local reset="$outdir/${obsid}.reset"
     local dstrk="$outdir/${obsid}.dstrk"
-    local dstrk_noCTI="$outdir/${obsid}_noCTI.dstrk"
     local aglow="$outdir/${obsid}.aglow"
     local abb_bpix="$outdir/${obsid}.abb_bpix"
     local bpix="$outdir/${obsid}.bpix"
@@ -97,9 +96,6 @@ process_obsid() {
 
     punlearn destreak
     destreak "$reset" "$dstrk" mask=NONE filter=no cl+
-    dmcopy \
-	"$dstrk[ccd_id=5,7][opt mem=999]" \
-	"$dstrk_noCTI" cl+
     dmmakepar "$dstrk" "$obspar" cl+
 
     punlearn acis_build_badpix
@@ -149,6 +145,13 @@ process_obsid() {
 	[yesTGnoCTI]="$dstrk_noCTI"
     )
 
+    tgain_opts=
+    cti_opts=
+    [ -n "$TGAIN" ] && tgain_opts .= " apply_tgain=$TGAIN"
+    [ -n "$TGAINFILE" ] && tgain_opts .= " tgainfile=$TGAINFILE"
+    [ -n "$CTI" ] && cti_opts .= " apply_cti=$CTI"
+    [ -n "$CTIFILE" ] && cti_opts .= " ctifile=$CTIFILE"
+
     for fstr in "${!ape_opts[@]}"; do
 	ape_opt=${ape_opts["$fstr"]}
 	ape_infile=${ape_infiles["$fstr"]}
@@ -163,6 +166,8 @@ process_obsid() {
 	     outfile="$ape" \
 	     acaofffile=NONE \
 	     $ape_opt \
+	     $tgain_opts \
+	     $cti_opts \
 	     badpixfile="$bpix" \
 	     mtlfile="$mtl" \
 	     eventdef='{d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}' \
