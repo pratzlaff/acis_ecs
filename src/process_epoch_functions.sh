@@ -335,14 +335,27 @@ link_new_old() {
     done
 }
 
+cmp_merges() {
+    local epoch=e$(printf %03d $((10#$1)))
+
+    cd /data/legs/rpete/data/ECS/$epoch
+    for f1 in merge/test2/*.evt2; do
+	b=$(basename $f1)
+	f2=merge/test2.bak/$(perl -ple 's/_(\d{3})/_yesTG_$1/' <<< $b)
+	ds1=$(dmkeypar $f1 datasum ec+)
+	ds2=$(dmkeypar $f2 datasum ec+)
+        [ $ds1 -eq $ds2 ] || echo $b;
+    done
+    cd -
+}
+
 cmp_repros() {
     local epoch=e$(printf %03d $((10#$1)))
 
     cd /data/legs/rpete/data/ECS/$epoch
     for o in [0-9]*; do
-        for f in $o/repro/*.evt2; do
-            b=$(basename $f);
-            f1=$o/repro/$b;
+        for f1 in $o/repro/*.evt2; do
+            b=$(basename $f1);
             f2=$o/repro.bak/$b;
             f2=$(sed s/\\/"$o"/\\/"$o"_yesTG/ <<<$f2);
             ds1=$(dmkeypar $f1 datasum ec+);
@@ -350,5 +363,6 @@ cmp_repros() {
             [ $ds1 -eq $ds2 ] || echo $b;
         done;
     done
+    cd -
 }
 
