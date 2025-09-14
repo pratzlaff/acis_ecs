@@ -58,6 +58,7 @@ unlink_pbk() {
     }
 }
 
+shopt -s extglob
 process_obsid() {
     [ $# -eq 1 ] || {
 	\echo "Usage: $0 indir" 1>&2
@@ -67,7 +68,7 @@ process_obsid() {
     local outdir="$indir/repro"
     mkdir -p "$outdir"
 
-    local evt1=$(\ls "$indir"/secondary/*evt1.fits*)
+    local evt1=$(echo "$indir"/secondary/*evt1.fits?(.gz))
     local mtl=$(\ls "$indir"/secondary/*mtl1.fits*)
     local msk=$(\ls "$indir"/secondary/*msk1.fits*)
     local stat=$(\ls "$indir"/secondary/*stat1.fits*)
@@ -152,11 +153,8 @@ process_obsid() {
     [ -n "$CTI" ] && cti_opts .= " apply_cti=$CTI"
     [ -n "$CTIFILE" ] && cti_opts .= " ctifile=$CTIFILE"
 
-    for fstr in "${!ape_opts[@]}"; do
-	ape_opt=${ape_opts["$fstr"]}
-	ape_infile=${ape_infiles["$fstr"]}
-	#ape_infile="$dstrk"
-	ape="$outdir/${obsid}_${fstr}.ape"
+	ape_infile="$dstrk"
+	ape="$outdir/${obsid}.ape"
 
         #logtool(['acis_process_events', 'infile='+ape_inf, 'outfile='+ape, 'badpixfile='+bpix, 'acaofffile=NONE', 'mtlfile='+mtl, 'apply_cti='+appcti, 'apply_tgain='+tg, 'ctifile='+cti_file, 'tgainfile='+tg_file, 'check_vf_pha=no', 'stop=tdet', 'pix_adj=NONE', 'eventdef={d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}'], silent=0, log=1)
 
@@ -175,12 +173,11 @@ process_obsid() {
 	     pix_adj=NONE \
 	     cl+
 
-	evt="$outdir/${obsid}_${fstr}.evt2"
+	evt="$outdir/${obsid}.evt2"
 	punlearn dmcopy
 	dmcopy "$ape"'[events][grade=0,2,3,4,6,status=0]' "$evt" cl+
 	dmcopy "$evt[@$flt]" "$evt" cl+
 
-    done
 
     kzero=273.15
     for t in $(seq 101 120); do
@@ -202,7 +199,7 @@ process_obsid() {
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	exp=$(dmkeypar "$dstrk[ccd_id=${ccd_id}][cols time]" exposure ec+)
 	if gt $exp 10; then
-	    yesTG="$outdir/${obsid}_yesTG.evt2"
+	    yesTG="$outdir/${obsid}.evt2"
 	    exp=$(dmkeypar "$yesTG[ccd_id=${ccd_id}][cols time]" exposure ec+)
 	    if gt $exp 10; then
 		for t in $(seq 101 120); do
@@ -211,16 +208,12 @@ process_obsid() {
 		    exp=$(dmkeypar "$yesTG[@${gti}][ccd_id=${ccd_id}][cols time]" exposure ec+)
 
 		    if gt $exp 10; then
-			fstrs='yesTG'
-			#[[ $ccd =~ s[13] ]] && fstrs+=' yesTGnoCTI'
-			for fstr in $fstrs; do
-			    evt="$outdir/${obsid}_${fstr}.evt2"
-			    evt_fpt="$outdir/${obsid}_${fstr}_${t}_${ccd}.evt2"
+			    evt="$outdir/${obsid}.evt2"
+			    evt_fpt="$outdir/${obsid}_${t}_${ccd}.evt2"
 			    dmcopy \
 				"$evt[@${gti}][ccd_id=${ccd_id}]" \
 				"$evt_fpt" \
 				cl+
-			done
 		    fi
 		    
 		done
@@ -244,15 +237,12 @@ merge_epoch() {
 
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	for t in $(seq 101 120); do
-	    fstrs='noTG yesTG noTGnoCTI yesTGnoCTI'
-	    fstrs='yesTG'
-	    for fstr in $fstrs; do
-		outf="e${e}_${ccd}_${fstr}_${t}.evt2"
-		globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${fstr}_${t}_${ccd}.evt2"
+		outf="e${e}_${ccd}_${t}.evt2"
+		globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${t}_${ccd}.evt2"
 		inevt2=$(\ls $globstr 2>/dev/null || :)
 		[ -z "$inevt2" ] || {
 		    nfiles=$(wc -l <<<"$inevt2")
-		    mergef="merge_lis/merge_${ccd}_${fstr}_${t}.lis"
+		    mergef="merge_lis/merge_${ccd}_${t}.lis"
 		    rm -f "$mergef"
 		    for f in $inevt2; do echo "$f" >> "$mergef"; done
 		    [ $nfiles -eq 1 ] && {
@@ -267,7 +257,6 @@ merge_epoch() {
 			    cl+
 		    }
 		}
-	    done
 	done
     done
 
@@ -345,3 +334,21 @@ link_new_old() {
 	done
     done
 }
+
+cmp_repros() {
+    local epoch=e$(printf %03d $((10#$1)))
+
+    cd /data/legs/rpete/data/ECS/$epoch
+    for o in [0-9]*; do
+        for f in $o/repro/*.evt2; do
+            b=$(basename $f);
+            f1=$o/repro/$b;
+            f2=$o/repro.bak/$b;
+            f2=$(sed s/\\/"$o"/\\/"$o"_yesTG/ <<<$f2);
+            ds1=$(dmkeypar $f1 datasum ec+);
+            ds2=$(dmkeypar $f2 datasum ec+);
+            [ $ds1 -eq $ds2 ] || echo $b;
+        done;
+    done
+}
+
