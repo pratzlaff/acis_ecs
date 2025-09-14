@@ -139,7 +139,7 @@ process_obsid() {
 	#[noTG]='apply_tg=no'
 	#[noTGnoCTI]='apply_tg=no apply_cti=no'
 	[yesTG]=
-	[yesTGnoCTI]='apply_cti=no'
+	#[yesTGnoCTI]='apply_cti=no'
     )
 
     ape_infiles=(
@@ -207,7 +207,7 @@ process_obsid() {
 
 		    if gt $exp 10; then
 			fstrs='yesTG'
-			[[ $ccd =~ s[13] ]] && fstrs+=' yesTGnoCTI'
+			#[[ $ccd =~ s[13] ]] && fstrs+=' yesTGnoCTI'
 			for fstr in $fstrs; do
 			    evt="$outdir/${obsid}_${fstr}.evt2"
 			    evt_fpt="$outdir/${obsid}_${fstr}_${t}_${ccd}.evt2"
@@ -224,217 +224,6 @@ process_obsid() {
 
 	(( ++ccd_id ))
     done
-}
-
-process_evt1_old() {
-    [ $# -eq 2 ] || {
-	\echo "Usage: $0 evt1 outdir" 1>&2
-	return 1
-    }
-    local evt1="$1"
-    local outdir="$2"
-    local indir=$(dirname "$evt1")
-
-    local obsid=$(dmkeypar "$evt1" obs_id ec+)
-    obsid_stripped=$((10#$obsid))
-    obsid=$(printf %05d $obsid_stripped)
-
-    local mtl=$(\ls "$indir"/*${obsid}*mtl1.fits*)
-    local msk=$(\ls "$indir"/*${obsid}*msk1.fits*)
-    local stat=$(\ls "$indir"/*${obsid}*stat1.fits*)
-    local flt=$(\ls "$indir"/*${obsid}*flt1.fits*)
-    local pbk="$indir/${obsid_stripped}_pbk.fits"
-    local bias="$indir/${obsid_stripped}_bias.lis"
-
-    local reset="$outdir/${obsid}.reset"
-    local dstrk="$outdir/${obsid}.dstrk"
-    local dstrk_noCTI="$outdir/${obsid}_noCTI.dstrk"
-    local aglow="$outdir/${obsid}.aglow"
-    local abb_bpix="$outdir/${obsid}.abb_bpix"
-    local bpix="$outdir/${obsid}.bpix"
-    local obspar="$outdir/obs${obsid}.par"
-
-    if [[ "$evt1" =~ \.gz ]]; then
-	gzip -dc "$evt1" > "$reset"
-    else
-	cp -a "$evt1" "$reset"
-    fi
-
-    unlink_pbk "$pbk"
-
-    punlearn ardlib
-
-    acis_clear_status_bits "$reset"
-
-    punlearn destreak
-    destreak "$reset" "$dstrk" mask=NONE filter=no cl+
-    dmcopy \
-	"$dstrk[ccd_id=5,7][opt mem=999]" \
-	"$dstrk_noCTI" cl+
-    dmmakepar "$dstrk" "$obspar" cl+
-
-    punlearn acis_build_badpix
-    acis_build_badpix \
-	obsfile="$obspar" \
-	pbkfile="$pbk" \
-	biasfile="@$bias" \
-	outfile="$abb_bpix" \
-	bitflag=00000000000000120021100020022222 \
-	calibfile=CALDB \
-	mode=h \
-	cl+
-
-    punlearn acis_find_afterglow
-    acis_find_afterglow \
-	infile="$dstrk" \
-	outfile="$aglow" \
-	badpixfile="$abb_bpix" \
-	maskfile="$msk" \
-	statfile="$stat" \
-	cl+
-
-    punlearn acis_build_badpix
-    acis_build_badpix \
-	obsfile="$obspar" \
-	pbkfile="$pbk" \
-	biasfile=NONE \
-	outfile="$bpix" \
-	calibfile="$aglow" \
-	procbias=no \
-	mode=h \
-	cl+
-
-    ## file combos: 'noTG', 'yesTG', 'noTGnoCTI', 'yesTGnoCTI'
-    declare -A ape_opts ape_infiles
-    ape_opts=(
-	[noTG]='apply_tg=no'
-	[yesTG]=
-	[noTGnoCTI]='apply_tg=no apply_cti=no'
-	[yesTGnoCTI]='apply_cti=no'
-    )
-
-    ape_infiles=(
-	[noTG]="$dstrk"
-	[yesTG]="$dstrk"
-	[noTGnoCTI]="$dstrk_noCTI"
-	[yesTGnoCTI]="$dstrk_noCTI"
-    )
-
-    for fstr in "${!ape_opts[@]}"; do
-	ape_opt=${ape_opts["$fstr"]}
-	ape_infile=${ape_infiles["$fstr"]}
-	ape="$outdir/${obsid}_${fstr}.ape"
-
-        #logtool(['acis_process_events', 'infile='+ape_inf, 'outfile='+ape, 'badpixfile='+bpix, 'acaofffile=NONE', 'mtlfile='+mtl, 'apply_cti='+appcti, 'apply_tgain='+tg, 'ctifile='+cti_file, 'tgainfile='+tg_file, 'check_vf_pha=no', 'stop=tdet', 'pix_adj=NONE', 'eventdef={d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}'], silent=0, log=1)
-
-	punlearn acis_process_events
-	acis_process_events \
-	     infile="$ape_infile" \
-	     outfile="$ape" \
-	     acaofffile=NONE \
-	     $ape_opt \
-	     badpixfile="$bpix" \
-	     mtlfile="$mtl" \
-	     eventdef='{d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}' \
-	     stop=tdet \
-	     pix_adj=NONE \
-	     cl+
-
-	evt="$outdir/${obsid}_${fstr}.evt2"
-	punlearn dmcopy
-	dmcopy "$ape"'[events][grade=0,2,3,4,6,status=0]' "$evt" cl+
-	dmcopy "$evt[@$flt]" "$evt" cl+
-
-    done
-
-    kzero=273.15
-    for t in $(seq 101 120); do
-	fpt_lo=$(echo "-($t+0.19)+$kzero" | bc)
-	fpt_hi=$(echo "${fpt_lo}+1" | bc)
-	gti="$outdir/${obsid}_${t}.gti"
-	# FIXME: cl+ gives
-	#        ERROR: both parameters userlimit and lkupfile do not
-	#        have a value specified.  At least one must have a value.
-	rm -f "$gti"
-	punlearn dmgti
-	dmgti \
-	    infile="$mtl" \
-	    "userlimit=( (fp_temp>=${fpt_lo})&&(fp_temp<${fpt_hi}))" \
-	    outfile="$gti"
-    done
-
-    ccd_id=0
-    for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
-	exp=$(dmkeypar "$dstrk[ccd_id=${ccd_id}][cols time]" exposure ec+)
-	if gt $exp 10; then
-	    yesTG="$outdir/${obsid}_yesTG.evt2"
-	    exp=$(dmkeypar "$yesTG[ccd_id=${ccd_id}][cols time]" exposure ec+)
-	    if gt $exp 10; then
-		for t in $(seq 101 120); do
-		    gti="$outdir/${obsid}_${t}.gti"
-		    dmlist "$gti" blocks | grep -q '3: GTI' || continue
-		    exp=$(dmkeypar "$yesTG[@${gti}][ccd_id=${ccd_id}][cols time]" exposure ec+)
-
-		    if gt $exp 10; then
-			fstrs='noTG yesTG'
-			[[ $ccd =~ s[13] ]] && fstrs+=' noTGnoCTI yesTGnoCTI'
-			for fstr in $fstrs; do
-			    evt="$outdir/${obsid}_${fstr}.evt2"
-			    evt_fpt="$outdir/${obsid}_${fstr}_${t}_${ccd}.evt2"
-			    dmcopy \
-				"$evt[@${gti}][ccd_id=${ccd_id}]" \
-				"$evt_fpt" \
-				cl+
-			done
-		    fi
-		    
-		done
-	    fi
-	fi
-
-	(( ++ccd_id ))
-    done
-}
-
-merge_epoch_old() {
-    [ $# -eq 2 ] || {
-	\echo "Usage: $0 outdir epoch" 1>&2
-	return 1
-    }
-    local outdir="$1"
-    local e=$(printf %03d $((10#"$2")))
-
-    for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
-	for t in $(seq 101 120); do
-	    fstrs='noTG yesTG'
-	    [[ $ccd =~ s[13] ]] && fstrs+=' noTGnoCTI yesTGnoCTI'
-	    for fstr in $fstrs; do
-		outf="$outdir/e${e}_${ccd}_${fstr}_${t}.evt2"
-		globstr="$outdir/[0-9]*_${fstr}_${t}_${ccd}.evt2"
-		inevt2=$(\ls $globstr 2>/dev/null || :)
-		nfiles=$(wc -l <<<"$inevt2")
-		[ -z "$inevt2" ] || {
-		    mergef="$outdir/merge_${ccd}_${fstr}_${t}.lis"
-		    rm -f "$mergef"
-		    for f in $inevt2; do echo $(basename "$f") >> "$mergef"; done
-		    [ $nfiles -eq 1 ] && {
-			cp -a "$inevt2" "$outf"
-		    } || {
-			punlearn dmmerge
-			dmmerge \
-			    "@${mergef}[events][subspace -expno]" \
-			    outfile="$outf" \
-			    lookupTab="$lookuptab" \
-			    mode=h \
-			    cl+
-		    }
-		}
-	    done
-	done
-    done
-
-    mkdir -p "$outdir/merge_lis"
-    mv "$outdir/merge_"*.lis "$outdir/merge_lis"
 }
 
 merge_epoch() {
@@ -451,6 +240,7 @@ merge_epoch() {
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	for t in $(seq 101 120); do
 	    fstrs='noTG yesTG noTGnoCTI yesTGnoCTI'
+	    fstrs='yesTG'
 	    for fstr in $fstrs; do
 		outf="e${e}_${ccd}_${fstr}_${t}.evt2"
 		globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${fstr}_${t}_${ccd}.evt2"
@@ -525,7 +315,7 @@ cmp_fits() {
 	return 1
     }
     local epoch=$(printf %03d "$1")
-    for f in "$datadir/e$epoch/fits/$ECSID/fits/fpt_120-119-118_256x256y_yesTG"/*.txt; do
+    for f in "$datadir/e$epoch/fits/$ECSID/fits/fpt_120-119-118_256x256y_yesTG"/[is][0-5]_{ecs,bkg,pha}.txt; do
 	bname=$(basename "$f")
 	\diff -u \
 	     $f \

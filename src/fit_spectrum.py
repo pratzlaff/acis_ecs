@@ -140,7 +140,7 @@ def do_fit(args):
     }
     bscl = bscls[xbin][ybin]
 
-    ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5','s1_noCTI','s3_noCTI']
+    ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
 
     basedir = '/data/legs/rpete/data/ECS'
     tstr = args.temps.replace(',', '-')
@@ -1272,7 +1272,7 @@ def main():
     #parser.add_argument('--foo', default=True, action=argparse.BooleanOptionalAction, help='--no-foo to change.')
     parser.add_argument('epoch', type=int, help='Epoch number.')
     parser.add_argument('ccd',
-                        choices=[f'i{i}' for i in range(4)] +[f's{i}' for i in range(6)] + ['s1_noCTI','s3_noCTI']
+                        choices=[f'i{i}' for i in range(4)] +[f's{i}' for i in range(6)]
                         )
     args = parser.parse_args()
 

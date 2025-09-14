@@ -35,7 +35,7 @@ for epoch in $epochs; do
     epoch=$(printf %03d $((10#"$epoch")))
     fitdir="/data/legs/rpete/data/ECS/e$epoch/fits/$ECSID/fits/fpt_${tstr}_${binx}x${biny}y_${apply_tgain}TG"
     rm -rf "$fitdir"
-    for ccd in i{0,1,2,3} s{0,1,2,3,4,5} s1_noCTI s3_noCTI; do
+    for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	echo $epoch $ccd
     done
 done | parallel -j 16 --colsep ' ' python $srcdir/fit_spectrum.py $tstr $apply_tgain $binx $biny
