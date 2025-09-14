@@ -38,4 +38,4 @@ rm -rf "$outdir"
 mkdir -p "$outdir"
 merge_epoch "$outdir" "$epoch" 2>&1 | tee "$outdir"/merge.log
 
-rm -rf /data/legs/rpete/data/ECS/e$epoch/*/repro
+#rm -rf /data/legs/rpete/data/ECS/e$epoch/*/repro

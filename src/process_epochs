@@ -1,8 +1,5 @@
 #! /bin/bash
 
-# first attempt at duplicating
-# /home/rpete/hal9000/ECS_fits/scripts/s999_repro.py
-
 set -eo pipefail
 
 # merge dir is /data/legs/rpete/data/ECS/e${epoch}/merge/$ECSID
@@ -17,8 +14,11 @@ SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 process_obsids="$SCRIPTDIR/process_obsids"
 
-eglob=$(perl -le 'print("{", join(",", map { sprintf "%03d", $_ } @ARGV),"}");' $epochs)
-indirs=$(bash -c 'echo '/data/legs/rpete/data/ECS/e$eglob/[0-9][0-9][0-9][0-9][0-9])
-echo $indirs
+[ $# -eq 1 ] && {
+    indirs=$(echo /data/legs/rpete/data/ECS/e$(printf %03d $((10#$1)))/[0-9][0-9][0-9][0-9][0-9])
+} || {
+    eglob=$(perl -le 'print("{", join(",", map { sprintf "%03d", $_ } @ARGV),"}");' $epochs)
+    indirs=$(bash -c 'echo '/data/legs/rpete/data/ECS/e$eglob/[0-9][0-9][0-9][0-9][0-9])
+}
 
 parallel -j 32 "$process_obsids" ::: $indirs
