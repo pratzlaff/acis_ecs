@@ -3,7 +3,7 @@
 datadir=/data/legs/rpete/data/ECS
 lookuptab=/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt
 
-# given year/month, return the epoch number
+# given year and month, return the epoch number
 epoch() {
     [ $# -eq 2 ] || {
 	\echo "Usage: $0 year month" 1>&2
@@ -17,7 +17,7 @@ epoch() {
     echo $(( $nmonths/3 + 1))
 }
 
-# given epoch number, return year/month of beginning
+# given epoch number, return year and month of beginning
 epoch_start() {
     [ $# -eq 1 ] || {
 	\echo "Usage: $0 epoch" 1>&2
@@ -206,16 +206,14 @@ process_obsid() {
 		    gti="$outdir/${obsid}_${t}.gti"
 		    dmlist "$gti" blocks | grep -q '3: GTI' || continue
 		    exp=$(dmkeypar "$yesTG[@${gti}][ccd_id=${ccd_id}][cols time]" exposure ec+)
-
 		    if gt $exp 10; then
-			    evt="$outdir/${obsid}.evt2"
-			    evt_fpt="$outdir/${obsid}_${t}_${ccd}.evt2"
-			    dmcopy \
-				"$evt[@${gti}][ccd_id=${ccd_id}]" \
-				"$evt_fpt" \
-				cl+
+			evt="$outdir/${obsid}.evt2"
+			evt_fpt="$outdir/${obsid}_${t}_${ccd}.evt2"
+			dmcopy \
+			    "$evt[@${gti}][ccd_id=${ccd_id}]" \
+			    "$evt_fpt" \
+			    cl+
 		    fi
-		    
 		done
 	    fi
 	fi
@@ -237,26 +235,26 @@ merge_epoch() {
 
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	for t in $(seq 101 120); do
-		outf="e${e}_${ccd}_${t}.evt2"
-		globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${t}_${ccd}.evt2"
-		inevt2=$(\ls $globstr 2>/dev/null || :)
-		[ -z "$inevt2" ] || {
-		    nfiles=$(wc -l <<<"$inevt2")
-		    mergef="merge_lis/merge_${ccd}_${t}.lis"
-		    rm -f "$mergef"
-		    for f in $inevt2; do echo "$f" >> "$mergef"; done
-		    [ $nfiles -eq 1 ] && {
-			cp -a "$inevt2" "$outf"
-		    } || {
-			punlearn dmmerge
-			dmmerge \
-			    "@${mergef}[events][subspace -expno]" \
-			    outfile="$outf" \
-			    lookupTab="$lookuptab" \
-			    mode=h \
-			    cl+
-		    }
+	    outf="e${e}_${ccd}_${t}.evt2"
+	    globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${t}_${ccd}.evt2"
+	    inevt2=$(\ls $globstr 2>/dev/null || :)
+	    [ -z "$inevt2" ] || {
+		nfiles=$(wc -l <<<"$inevt2")
+		mergef="merge_lis/merge_${ccd}_${t}.lis"
+		rm -f "$mergef"
+		for f in $inevt2; do echo "$f" >> "$mergef"; done
+		[ $nfiles -eq 1 ] && {
+		    cp -a "$inevt2" "$outf"
+		} || {
+		    punlearn dmmerge
+		    dmmerge \
+			"@${mergef}[events][subspace -expno]" \
+			outfile="$outf" \
+			lookupTab="$lookuptab" \
+			mode=h \
+			cl+
 		}
+	    }
 	done
     done
 
@@ -309,7 +307,7 @@ cmp_fits() {
 	return 1
     }
     local epoch=$(printf %03d "$1")
-    for f in "$datadir/e$epoch/fits/$ECSID/fits/fpt_120-119-118_256x256y_yesTG"/[is][0-5]_{ecs,bkg,pha}.txt; do
+    for f in "$datadir/e$epoch/fits/$ECSID/fits/fpt_120-119-118_256x256y"/[is][0-5]_{ecs,bkg,pha}.txt; do
 	bname=$(basename "$f")
 	\diff -u \
 	     $f \

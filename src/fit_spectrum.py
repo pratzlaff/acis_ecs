@@ -126,7 +126,7 @@ def do_fit(args):
     ybin = args.biny
     # FIXME
     fptv = 120118
-    tg = args.tgain
+    tg = 'yes'
     enum = args.epoch
     e = f'{args.epoch:03d}'
 
@@ -145,8 +145,8 @@ def do_fit(args):
     basedir = '/data/legs/rpete/data/ECS'
     tstr = args.temps.replace(',', '-')
     sfpt = tstr
-    spec_dir = f'{basedir}/e{e}/fits/{ecsid}/spec/fpt_{tstr}_{xbin}x{ybin}y_{tg}TG/'
-    fit_dir= f'{basedir}/e{e}/fits/{ecsid}/fits/fpt_{tstr}_{xbin}x{ybin}y_{tg}TG/'
+    spec_dir = f'{basedir}/e{e}/fits/{ecsid}/spec/fpt_{tstr}_{xbin}x{ybin}y'
+    fit_dir= f'{basedir}/e{e}/fits/{ecsid}/fits/fpt_{tstr}_{xbin}x{ybin}y'
     plt_dir= f'{fit_dir}/figs/'
 
     if not os.path.exists(spec_dir): sys.exit('\n\nspec_dir does not exist \n\t{}\n'.format(spec_dir))
@@ -1266,7 +1266,6 @@ def main():
         description='Fit an ECS epoch.'
     )
     parser.add_argument('temps', help='e.g., 120,119,118')
-    parser.add_argument('tgain', choices=['no', 'yes'])
     parser.add_argument('binx', type=int)
     parser.add_argument('biny', type=int)
     #parser.add_argument('--foo', default=True, action=argparse.BooleanOptionalAction, help='--no-foo to change.')

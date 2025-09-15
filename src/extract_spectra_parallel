@@ -8,14 +8,12 @@ set -eo pipefail
     exit 1
 }
 
-[ $# -ge 4 ] || {
-    \echo "Usage: $0 t1,t2,... apply_tgain binx biny [epoch1 epoch2 ...]" 1>&2
+[ $# -ge 3 ] || {
+    \echo "Usage: $0 t1,t2,... binx biny [epoch1 epoch2 ...]" 1>&2
     exit 1
 }
 
 tstr="$1"
-shift
-apply_tgain="$1"
 shift
 binx="$1"
 shift
@@ -28,5 +26,5 @@ SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 extract_spectra="$SCRIPTDIR/extract_spectra"
 
-parallel -j 16 $extract_spectra $tstr $apply_tgain $binx $biny ::: $epochs
+parallel -j 16 $extract_spectra $tstr $binx $biny ::: $epochs
 

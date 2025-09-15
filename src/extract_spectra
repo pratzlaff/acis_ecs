@@ -11,15 +11,13 @@ set -eo pipefail
     exit 1
 }
 
-[ $# -ge 4 ] || {
-    \echo "Usage: $0 t1,t2,... apply_tgain binx biny [epoch1 epoch2 ...]" 1>&2
+[ $# -ge 3 ] || {
+    \echo "Usage: $0 t1,t2,... binx biny [epoch1 epoch2 ...]" 1>&2
     exit 1
 }
 
 temps=$(sed 's/,/ /g' <<<"$1")
 tstr=$(sed 's/,/-/g' <<<"$1")
-shift
-apply_tgain="$1"
 shift
 binx="$1"
 shift
@@ -62,13 +60,11 @@ extract_spectra() {
     [ -d "$merge_outdir" ] || {
 	mkdir -p "$merge_lis_outdir"
 	for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
-	    merge_list="$merge_lis_outdir/merge_${ccd}_${apply_tgain}TG.lis"
+	    merge_list="$merge_lis_outdir/merge_${ccd}.lis"
 	    rm -f "$merge_list"
-	    evt2_out="${merge_outdir}/${ccd}_${apply_tgain}TG.evt2"
+	    evt2_out="${merge_outdir}/${ccd}.evt2"
 	    for t in $temps; do
-		s=
-		[[ $ccd =~ noCTI ]] && s=noCTI
-		evt2_add="${merge_indir}/e${epoch}_${ccd:0:2}_${apply_tgain}TG${s}_${t}.evt2"
+		evt2_add="${merge_indir}/e${epoch}_${ccd:0:2}_${t}.evt2"
 		[ -f "$evt2_add"?(.gz) ] || {
 		    echo not found "$evt2_add"?(.gz)
 		    continue
@@ -85,11 +81,11 @@ extract_spectra() {
 	done
     }
 
-    spec_dir="$outdir/spec/fpt_${tstr}_${binx}x${biny}y_${apply_tgain}TG"
+    spec_dir="$outdir/spec/fpt_${tstr}_${binx}x${biny}y"
     rm -rf "$spec_dir"
     mkdir -p "$spec_dir"
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
-	evt="${merge_outdir}/${ccd}_${apply_tgain}TG.evt2"
+	evt="${merge_outdir}/${ccd}.evt2"
 	[ -f "$evt" ] || continue
 	echo extracting from $evt
 	for x in $(seq 1 $binx 1024); do

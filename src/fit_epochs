@@ -8,14 +8,12 @@ set -eo pipefail
     exit 1
 }
 
-[ $# -ge 4 ] || {
-    echo "Usage: $0 tstr apply_tgain binx biny [epoch1 epoch2 ...]" 1>&2
+[ $# -ge 3 ] || {
+    echo "Usage: $0 tstr binx biny [epoch1 epoch2 ...]" 1>&2
     exit 1
 }
 
 tstr=$(sed 's/,/-/g' <<<"$1")
-shift
-apply_tgain="$1"
 shift
 binx="$1"
 shift
@@ -33,10 +31,10 @@ srcdir=/data/legs/rpete/flight/acis_ecs/src/
 
 for epoch in $epochs; do
     epoch=$(printf %03d $((10#"$epoch")))
-    fitdir="/data/legs/rpete/data/ECS/e$epoch/fits/$ECSID/fits/fpt_${tstr}_${binx}x${biny}y_${apply_tgain}TG"
+    fitdir="/data/legs/rpete/data/ECS/e$epoch/fits/$ECSID/fits/fpt_${tstr}_${binx}x${biny}y"
     rm -rf "$fitdir"
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	echo $epoch $ccd
     done
-done | parallel -j 16 --colsep ' ' python $srcdir/fit_spectrum.py $tstr $apply_tgain $binx $biny
+done | parallel -j 16 --colsep ' ' python $srcdir/fit_spectrum.py $tstr $binx $biny
 
