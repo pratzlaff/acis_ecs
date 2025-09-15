@@ -182,18 +182,16 @@ process_obsid() {
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	exp=$(dmkeypar "$dstrk[ccd_id=${ccd_id}][cols time]" exposure ec+)
 	if gt $exp 10; then
-	    yesTG="$outdir/${obsid}.evt2"
-	    exp=$(dmkeypar "$yesTG[ccd_id=${ccd_id}][cols time]" exposure ec+)
+	    exp=$(dmkeypar "$evt2[ccd_id=${ccd_id}][cols time]" exposure ec+)
 	    if gt $exp 10; then
 		for t in $(seq 101 120); do
 		    gti="$outdir/${obsid}_${t}.gti"
 		    dmlist "$gti" blocks | grep -q '3: GTI' || continue
-		    exp=$(dmkeypar "$yesTG[@${gti}][ccd_id=${ccd_id}][cols time]" exposure ec+)
+		    exp=$(dmkeypar "$evt2[@${gti}][ccd_id=${ccd_id}][cols time]" exposure ec+)
 		    if gt $exp 10; then
-			evt="$outdir/${obsid}.evt2"
 			evt_fpt="$outdir/${obsid}_${t}_${ccd}.evt2"
 			dmcopy \
-			    "$evt[@${gti}][ccd_id=${ccd_id}]" \
+			    "$evt2[@${gti}][ccd_id=${ccd_id}]" \
 			    "$evt_fpt" \
 			    cl+
 		    fi
