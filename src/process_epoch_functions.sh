@@ -130,21 +130,21 @@ process_obsid() {
 	mode=h \
 	cl+
 
-    ## file combos: 'noTG', 'yesTG', 'noTGnoCTI', 'yesTGnoCTI'
-    declare -A ape_opts ape_infiles
-    ape_opts=(
-	#[noTG]='apply_tg=no'
-	#[noTGnoCTI]='apply_tg=no apply_cti=no'
-	[yesTG]=
-	#[yesTGnoCTI]='apply_cti=no'
-    )
+    # ## file combos: 'noTG', 'yesTG', 'noTGnoCTI', 'yesTGnoCTI'
+    # declare -A ape_opts ape_infiles
+    # ape_opts=(
+    # 	#[noTG]='apply_tg=no'
+    # 	#[noTGnoCTI]='apply_tg=no apply_cti=no'
+    # 	[yesTG]=
+    # 	#[yesTGnoCTI]='apply_cti=no'
+    # )
 
-    ape_infiles=(
-	[noTG]="$dstrk"
-	[yesTG]="$dstrk"
-	[noTGnoCTI]="$dstrk_noCTI"
-	[yesTGnoCTI]="$dstrk_noCTI"
-    )
+    # ape_infiles=(
+    # 	[noTG]="$dstrk"
+    # 	[yesTG]="$dstrk"
+    # 	[noTGnoCTI]="$dstrk_noCTI"
+    # 	[yesTGnoCTI]="$dstrk_noCTI"
+    # )
 
     tgain_opts=
     cti_opts=
