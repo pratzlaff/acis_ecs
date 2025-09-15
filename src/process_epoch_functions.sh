@@ -130,22 +130,6 @@ process_obsid() {
 	mode=h \
 	cl+
 
-    # ## file combos: 'noTG', 'yesTG', 'noTGnoCTI', 'yesTGnoCTI'
-    # declare -A ape_opts ape_infiles
-    # ape_opts=(
-    # 	#[noTG]='apply_tg=no'
-    # 	#[noTGnoCTI]='apply_tg=no apply_cti=no'
-    # 	[yesTG]=
-    # 	#[yesTGnoCTI]='apply_cti=no'
-    # )
-
-    # ape_infiles=(
-    # 	[noTG]="$dstrk"
-    # 	[yesTG]="$dstrk"
-    # 	[noTGnoCTI]="$dstrk_noCTI"
-    # 	[yesTGnoCTI]="$dstrk_noCTI"
-    # )
-
     tgain_opts=
     cti_opts=
     [ -n "$TGAIN" ] && tgain_opts .= " apply_tgain=$TGAIN"
@@ -153,31 +137,30 @@ process_obsid() {
     [ -n "$CTI" ] && cti_opts .= " apply_cti=$CTI"
     [ -n "$CTIFILE" ] && cti_opts .= " ctifile=$CTIFILE"
 
-	ape_infile="$dstrk"
-	ape="$outdir/${obsid}.ape"
+    ape_infile="$dstrk"
+    ape="$outdir/${obsid}.ape"
 
-        #logtool(['acis_process_events', 'infile='+ape_inf, 'outfile='+ape, 'badpixfile='+bpix, 'acaofffile=NONE', 'mtlfile='+mtl, 'apply_cti='+appcti, 'apply_tgain='+tg, 'ctifile='+cti_file, 'tgainfile='+tg_file, 'check_vf_pha=no', 'stop=tdet', 'pix_adj=NONE', 'eventdef={d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}'], silent=0, log=1)
+    #logtool(['acis_process_events', 'infile='+ape_inf, 'outfile='+ape, 'badpixfile='+bpix, 'acaofffile=NONE', 'mtlfile='+mtl, 'apply_cti='+appcti, 'apply_tgain='+tg, 'ctifile='+cti_file, 'tgainfile='+tg_file, 'check_vf_pha=no', 'stop=tdet', 'pix_adj=NONE', 'eventdef={d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}'], silent=0, log=1)
 
-	punlearn acis_process_events
-	acis_process_events \
-	     infile="$ape_infile" \
-	     outfile="$ape" \
-	     acaofffile=NONE \
-	     $ape_opt \
-	     $tgain_opts \
-	     $cti_opts \
-	     badpixfile="$bpix" \
-	     mtlfile="$mtl" \
-	     eventdef='{d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}' \
-	     stop=tdet \
-	     pix_adj=NONE \
-	     cl+
+    punlearn acis_process_events
+    acis_process_events \
+	infile="$ape_infile" \
+	outfile="$ape" \
+	acaofffile=NONE \
+	$ape_opt \
+	$tgain_opts \
+	$cti_opts \
+	badpixfile="$bpix" \
+	mtlfile="$mtl" \
+	eventdef='{d:time,l:expno,s:ccd_id,s:node_id,s:chip,s:tdet,d:phas,l:pha,l:pha_ro,f:energy,l:pi,s:fltgrade,s:grade,x:status}' \
+	stop=tdet \
+	pix_adj=NONE \
+	cl+
 
-	evt="$outdir/${obsid}.evt2"
-	punlearn dmcopy
-	dmcopy "$ape"'[events][grade=0,2,3,4,6,status=0]' "$evt" cl+
-	dmcopy "$evt[@$flt]" "$evt" cl+
-
+    local evt2="$outdir/${obsid}.evt2"
+    punlearn dmcopy
+    dmcopy "$ape"'[events][grade=0,2,3,4,6,status=0]' "$evt2" cl+
+    dmcopy "$evt2[@$flt]" "$evt2" cl+
 
     kzero=273.15
     for t in $(seq 101 120); do
@@ -191,7 +174,7 @@ process_obsid() {
 	punlearn dmgti
 	dmgti \
 	    infile="$mtl" \
-	    "userlimit=( (fp_temp>=${fpt_lo})&&(fp_temp<${fpt_hi}))" \
+	    "userlimit=((fp_temp>=${fpt_lo})&&(fp_temp<${fpt_hi}))" \
 	    outfile="$gti"
     done
 
