@@ -3,18 +3,17 @@ from datetime import datetime,timedelta
 from glob import glob
 import numpy as np
 import os
-from tempfile import TemporaryDirectory as mktempdir
 
-from sherpa.astro import ui,xspec
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-plt.rc('ytick', direction='in', color='gray', right=1)
-plt.rc('xtick', direction='in', color='gray', top=1)
-plt.rc('legend', fontsize='small', frameon=1, loc='upper left')
-plt.rc('figure', labelsize='small', figsize=[9,6.5])
-plt.rc('axes', labelsize='small')
-plt.rc('lines', markerfacecolor='none')    ## always non-filled markers
+def plt_prefs():
+    plt.rc('ytick', direction='in', color='gray', right=1)
+    plt.rc('xtick', direction='in', color='gray', top=1)
+    plt.rc('legend', fontsize='small', frameon=1, loc='upper left')
+    plt.rc('figure', labelsize='small', figsize=[9,6.5])
+    plt.rc('axes', labelsize='small')
+    plt.rc('lines', markerfacecolor='none')    ## always non-filled markers
 
 # given year and month, return epoch number
 def epoch(year, month):
@@ -35,18 +34,18 @@ xtra=''; xtra_label='CALDB'
 #xtra='_v7242025'; xtra_label='v7242025'
 #xtra='_v7252025'; xtra_label='v7252025'
 
-estart=87
-e_list= np.arange(estart,101+1)
-
 def plt_spec(args):
 
+    plt_prefs()
+
+    temps = np.array([ int(t) for t in args.temps.split(',')])
     e_list = args.epochs
     dfmt= '%Y-%m-%d'
     fpt=args.temps.replace(',', '-')
     if args.pdf:
         pdf = PdfPages(args.pdf)
 
-    ############################## plot
+    ## plot
     def plt_stuff():
 
         f,ax= plt.subplots(4,1,sharex=1,sharey=1)
@@ -119,18 +118,17 @@ def plt_spec(args):
                 ax[i].vlines(datetime.strptime('2024-1-15',dfmt),vmin,vmax,color='blue',label=lbl5,lw=0.5,ls='--')        
 
         if xtra=='':
-            for i in range(0,4):
-                lbl1=''; lbl2=''; lbl3=''; lbl4=''; lbl5=''
+            for i in range(4):
+                label=None
                 if i==1:
-                    lbl1='11/1/2021 gain'; lbl2='8/2/2022 gain'
-                ax[i].vlines(datetime.strptime('2021-11-01',dfmt),vmin,vmax,color='blue',label=lbl1,lw=0.5,ls='--')
-                ax[i].vlines(datetime.strptime('2022-08-02',dfmt),vmin,vmax,color='blue',label=lbl2,lw=0.5,ls='--')
-
-
+                    label=date+' gain'
+                for date in '2021-11-01', '2022-08-02':
+                    ax[i].vlines(datetime.strptime(date,dfmt),vmin,vmax,color='blue',label=label,lw=0.5,ls='--')
 
             
-        f.suptitle('ECS {}-Ka LineE -120:-117C -- {} -- 256x256y \t\t{}'.expandtabs().format(mtl,ccd.upper(),xtra_label))
-        ax[0].set_ylabel('node0'); ax[1].set_ylabel('node1'); ax[2].set_ylabel('node2'); ax[3].set_ylabel('node3')
+        f.suptitle(f'ECS {mtl}-Ka LineE -{temps.max()}:-{temps.min()-1}C -- {ccd.upper()} -- 256x256y \t\t{xtra_label}'.expandtabs())
+        for i in range(4):
+            ax[i].set_ylabel(f'node{i}')
 
         #ax[0].set_xlim(datetime.strptime('2020-10-01',dfmt), datetime.strptime('2025-05-01',dfmt))
 
@@ -147,15 +145,10 @@ def plt_spec(args):
         if args.pdf:
             pdf.savefig(f)
         else:
-            #f.savefig('{}/tst_{}_{}_{}.pdf'.format(tdir,ccd,xtra_label,mtl))
-            #plt.close()
             plt.show()
 
-        ######################################################
+    ## end of plt_stuff()
 
-    tdir_tmp= mktempdir(dir='.')  ## tmpdir created in ./  otherwise /tmp/
-    tdir= tdir_tmp.name
-    
     ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
     for ccd in ccd_list:
 
@@ -258,15 +251,8 @@ def plt_spec(args):
 
             plt_stuff()
 
-
-        #os.system('pdfjam --landscape {}/*pdf -o s999_plts/{}_120-117_e84-101_{}.pdf'.format(tdir,ccd,xtra_label))
-
     if args.pdf:
         pdf.close()
-    else:
-        pass
-        #for mtl in [args.line]: #'Al']: #,'Mn']:
-            #os.system('pdfjam --landscape {}/tst_*_{}.pdf -o s999_plts/{}_120-117_e{}-101_{}.pdf'.format(tdir,mtl,mtl,estart,xtra_label))    
 
 def main():
     parser = argparse.ArgumentParser(
