@@ -96,35 +96,20 @@ def plt_spec(args):
         if mtl=='Mn':
             vmin= -80; vmax=80
 
+        vlines = {
+            ''          : ['2021-11-01', '2022-08-02'],
+            '_v772025'  : ['2021-11-01', '2022-09-15', '2024-01-15'],
+            '_v7232025' : ['2021-11-01', '2022-09-15', '2023-03-01', '2023-12-15', '2024-10-15'],
+        }
+        for key in '_v7242025', '_v7252025':
+            vlines[key] = vlines['_v7232025']
 
-        if xtra=='_v7232025' or xtra=='_v7242025' or xtra=='_v7252025':
-            for i in range(0,4):
-                lbl1=''; lbl2=''; lbl3=''; lbl4=''; lbl5=''
-                if i==1:
-                    lbl1='11/1/2021 gain'; lbl2='9/15/2022 gain'; lbl3='3/1/2023 gain'; lbl4='12/15/2023 gain'; lbl5='10/15/2024 gain'
-                ax[i].vlines(datetime.strptime('2021-11-01',dfmt),vmin,vmax,color='blue',label=lbl1,lw=0.5,ls='--')
-                ax[i].vlines(datetime.strptime('2022-09-15',dfmt),vmin,vmax,color='blue',label=lbl2,lw=0.5,ls='--')
-                ax[i].vlines(datetime.strptime('2023-03-01',dfmt),vmin,vmax,color='blue',label=lbl3,lw=0.5,ls='--')
-                ax[i].vlines(datetime.strptime('2023-12-15',dfmt),vmin,vmax,color='blue',label=lbl4,lw=0.5,ls='--')                
-                ax[i].vlines(datetime.strptime('2024-10-15',dfmt),vmin,vmax,color='blue',label=lbl5,lw=0.5,ls='--')        
-
-        if xtra=='_v772025':
-            for i in range(0,4):
-                lbl1=''; lbl2=''; lbl3=''; lbl4=''; lbl5=''
-                if i==1:
-                    lbl1='11/1/2021 gain'; lbl2='9/15/2022 gain'; lbl5='1/15/2024 gain'
-                ax[i].vlines(datetime.strptime('2021-11-01',dfmt),vmin,vmax,color='blue',label=lbl1,lw=0.5,ls='--')
-                ax[i].vlines(datetime.strptime('2022-09-15',dfmt),vmin,vmax,color='blue',label=lbl2,lw=0.5,ls='--')
-                ax[i].vlines(datetime.strptime('2024-1-15',dfmt),vmin,vmax,color='blue',label=lbl5,lw=0.5,ls='--')        
-
-        if xtra=='':
-            for i in range(4):
-                label=None
+        for i in range(4):
+            label=None
+            for date in vlines[xtra]:
                 if i==1:
                     label=date+' gain'
-                for date in '2021-11-01', '2022-08-02':
-                    ax[i].vlines(datetime.strptime(date,dfmt),vmin,vmax,color='blue',label=label,lw=0.5,ls='--')
-
+                ax[i].vlines(datetime.strptime(date,dfmt),vmin,vmax,color='blue',label=label,lw=0.5,ls='--')
             
         f.suptitle(f'ECS {mtl}-Ka LineE -{temps.max()}:-{temps.min()-1}C -- {ccd.upper()} -- 256x256y \t\t{xtra_label}'.expandtabs())
         for i in range(4):
