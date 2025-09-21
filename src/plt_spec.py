@@ -120,7 +120,7 @@ def plt_spec(args):
         if mtl=='Al': ylim=[-50,50]
         if mtl=='Mn': ylim=[-100,100]    
 
-        ax[0].set_ylim(ylim)
+        #ax[0].set_ylim(ylim)
         z=ax[0].get_yticks()   ##; print(z)
         newz=[z[1],z[2],z[3]]; ax[0].set_yticks(newz)
         ax[0].legend()

@@ -12,8 +12,6 @@ epochs="$@"
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-process_obsids="$SCRIPTDIR/process_obsids"
-
 [ $# -eq 1 ] && {
     indirs=$(echo /data/legs/rpete/data/ECS/e$(printf %03d $((10#$1)))/[0-9][0-9][0-9][0-9][0-9])
 } || {
@@ -21,4 +19,5 @@ process_obsids="$SCRIPTDIR/process_obsids"
     indirs=$(bash -c 'echo '/data/legs/rpete/data/ECS/e$eglob/[0-9][0-9][0-9][0-9][0-9])
 }
 
+process_obsids="$SCRIPTDIR/process_obsids"
 parallel -j 32 "$process_obsids" ::: $indirs

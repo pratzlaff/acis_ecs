@@ -33,9 +33,9 @@ ciao -o
 
 . $SCRIPTDIR/tmppdir.sh
 
-outdir=/data/legs/rpete/data/ECS/e$epoch/merge/"$ECSID"
+outdir="$datadir/e${epoch}/merge/$ECSID"
 rm -rf "$outdir"
 mkdir -p "$outdir"
 merge_epoch "$outdir" "$epoch" 2>&1 | tee "$outdir"/merge.log
 
-#rm -rf /data/legs/rpete/data/ECS/e$epoch/*/repro
+rm -rf "$datadir/e${epoch}/[0-9]*/repro
