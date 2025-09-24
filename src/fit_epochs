@@ -33,5 +33,5 @@ pdfpost="/fits/$ECSID/fits/fpt_${tstr}_${binx}x${biny}y/figs/"
 
 epochs=$(bash -c "for e in $epochs; do printf '%03d ' \$e; done")
 ccds=$( echo i{0,1,2,3} s{0,1,2,3,4,5} )
-parallel -j 16 python "$srcdir/fit_spectrum.py" -p "$pdfpre"{1}"$pdfpost"{2}.pdf $tstr $binx $biny {1} {2} ::: $epochs ::: $ccds
+parallel -j 16 python "$srcdir/fit_spectrum_narrowwin.py" -p "$pdfpre"{1}"$pdfpost"{2}.pdf $tstr $binx $biny {1} {2} ::: $epochs ::: $ccds
 

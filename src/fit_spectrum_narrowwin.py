@@ -319,21 +319,13 @@ def do_fit(args):
                 if ccd=='s3_noCTI': ccdrsp='s3'                
                 if bin==64256 or bin==128256: rspx= 32
 
-                if bin==256256:
-                    rmf_fpt= f'{fptv-2}-{fptv}'
-                    if fptv==120 or fptv==120118: rmf_fpt= '119-120'
-                    rmf_dir= f'{basedir}/acis_response/rmf/pi_{rspx}x{rspy}y_{rmf_fpt}'
-                    rmf,= glob(f'{rmf_dir}/{ccd}_{sxl}-*x_{syl}-*y.wrmf')
+                tmin = np.array([int(t) for t in tstr.split('-')]).max()
+                rmf_fpt = f'{tmin-1}-{tmin}' if tmin==120 else f'{tmin-2}-{tmin}'
+                rmf_dir= f'{basedir}/acis_response/rmf/pi_{rspx}x{rspy}y_{rmf_fpt}'
+                rmf,= glob(f'{rmf_dir}/{ccd}_{sxl}-*x_{syl}-*y.wrmf')
 
-                if bin==32128 or bin==32256:
-                    rmf_dir= '/data/hal9000/acis_response/rmf/pi_{}x{}y'.format(rspx,rspy)
-                    rmf,= glob('{}/{}_{}-*x_{}-*y.wrmf'.format(rmf_dir, ccd, sxl, syl))
-                    
-                if bin==256256:
-                    arf_date= '{}-09-01'.format(round(dyear))                
-                    if dyear>2024: arf_date='2024-09-01'
-                if bin==32128 or bin==32256: arf_date= '2000-09'
-
+                arf_date= '{}-09-01'.format(round(dyear))
+                if dyear>2024: arf_date='2024-09-01'
                 arf_dir= '/data/hal9000/acis_response/arf/{}/{}x{}y/HRMA1'.format(arf_date,rspx,rspy)
                 arf_dir= f'{basedir}/acis_response/arf/{arf_date}/{rspx}x{rspy}y/HRMA1'
                 arf,= glob('{}/{}_{}-*x_{}-*y.warf'.format(arf_dir, ccdrsp, sxl, syl))
