@@ -27,14 +27,11 @@ shopt -s expand_aliases nocasematch
 
 ciao
 
-srcdir=/data/legs/rpete/flight/acis_ecs/src/
+srcdir=/data/legs/rpete/flight/acis_ecs/src
+pdfpre="/data/legs/rpete/data/ECS/e"
+pdfpost="/fits/$ECSID/fits/fpt_${tstr}_${binx}x${biny}y/figs/"
 
-for epoch in $epochs; do
-    epoch=$(printf %03d $((10#"$epoch")))
-    fitdir="/data/legs/rpete/data/ECS/e$epoch/fits/$ECSID/fits/fpt_${tstr}_${binx}x${biny}y"
-    rm -rf "$fitdir"
-    for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
-	echo $epoch $ccd
-    done
-done | parallel -j 16 --colsep ' ' python $srcdir/fit_spectrum.py $tstr $binx $biny
+epochs=$(bash -c "for e in $epochs; do printf '%03d ' \$e; done")
+ccds=$( echo i{0,1,2,3} s{0,1,2,3,4,5} )
+parallel -j 16 python "$srcdir/fit_spectrum.py" -p "$pdfpre"{1}"$pdfpost"{2}.pdf $tstr $binx $biny {1} {2} ::: $epochs ::: $ccds
 

@@ -19,10 +19,6 @@ xtra=''  ## default
 #xtra='_v7252025'   ##2nd attempt fix s0/4/5
 
 
-##### run a single ccd
-dosingle=0
-if dosingle: testccd='s1'
-
 ##### test run, only stdout output
 test=0
 if test: testccd='s0'
@@ -30,7 +26,6 @@ if test: testccd='s0'
 if test==1:
     clob='yes'   ## doesn't matter for test runs
     recpars=0    ## output .txt switch
-    savplt=0     ## output .pdf switch
     do2fit=1     ## 2nd fit for more fit accuracy
     xstart=1
     ystart=1
@@ -40,7 +35,6 @@ if test==1:
 else:
     clob='no'    ## checks if [ccd]_ecs.txt exists
     recpars=1    ## output .txt switch
-    savplt=1     ## output .pdf switch
     do2fit=1     ## 2nd fit for more fit accuracy
     xstart=1; ystart=1  ## chipX/Y loop start -- don't change!
     testerr=0    ## always keep this =0
@@ -50,31 +44,28 @@ else:
 noerr=0   ## 1= turn off conf completely
 toperr=0  ## 1= turn on err only for 256x256y and yl=769, overrides all other settings
 
-
 ### use this for _very_ badly shifted spec
 #xtrascl=0
 #xtrascl=3  ## 7= 70-210eV, 5= 50-150eV, 3= 30-90eV, 1= 10-30eV
-
 
 xcnt_thresh_min=2500  ## min counts to fit bkg widths, and run err on some bkg lines
 xcnt_thresh_max=100000  ## max counts to fit bkg widths, and run err on some bkg lines, too high == ECS overwhelms bkg
 cnt_thresh=200    ## min counts in the .pi spectrum, otherwise skip    
 thresh=5e-5  ## norm theshold to run conf vs covar
-numcores=4
-
+numcores=16
 
 cnt_thresh=100    ## min counts in the .pi spectrum, otherwise skip    
 
-
 ## don't edit below here ##
-import numpy as np
-from glob import glob
 from astropy.time import Time as timetime
 from astropy.io.fits import open as astro_open
-from tempfile import TemporaryDirectory as mktempdir
-import shutil
-
+from glob import glob
 from matplotlib import pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import numpy as np
+import shutil
+from tempfile import TemporaryDirectory as mktempdir
+
 plt.rc('ytick', direction='in', color='grey', right=1)
 plt.rc('xtick', direction='in', color='grey', top=1)
 plt.rc('legend', fontsize='small', frameon=1, loc='upper left')
@@ -83,9 +74,9 @@ plt.rc('axes', labelsize='small')
 plt.rc('lines', markerfacecolor='none')    ## always non-filled markers
 from matplotlib.ticker import ScalarFormatter
 
-if not test:
-    from matplotlib import use as pltuse
-    pltuse('Agg')
+# if not test:
+#     from matplotlib import use as pltuse
+#     pltuse('Agg')
 
 from sherpa.astro import ui
 import logging
@@ -96,8 +87,7 @@ def linfo(): logger.setLevel(logging.INFO)
 
 pdir_tmp= mktempdir(dir='.')
 pdir= pdir_tmp.name
-os.environ['PFILES']='{};/usr/local/ciao/contrib/param:/usr/local/ciao/param:'.format(pdir)
-
+os.environ['PFILES']=f'{pdir};/usr/local/ciao/contrib/param:/usr/local/ciao/param:'
 
 if False:
     enum= int(e)
@@ -117,16 +107,17 @@ dgdir= '/usr/local/ciao/CALDB/data/chandra/acis/det_gain/'
 dg_yesCTI= dgdir+'acisD2000-01-29gain_ctiN0008.fits'
 dg_noCTI= dgdir+'acisD2000-01-29gainN0005.fits'
 
-
+pdf = None
 
 #################################################
 def do_fit(args):
+    global pdf
+
     ccd = args.ccd
     xbin = args.binx
     ybin = args.biny
     # FIXME
     fptv = 120118
-    tg = 'yes'
     enum = args.epoch
     e = f'{args.epoch:03d}'
 
@@ -147,17 +138,15 @@ def do_fit(args):
     sfpt = tstr
     spec_dir = f'{basedir}/e{e}/fits/{ecsid}/spec/fpt_{tstr}_{xbin}x{ybin}y'
     fit_dir= f'{basedir}/e{e}/fits/{ecsid}/fits/fpt_{tstr}_{xbin}x{ybin}y'
-    plt_dir= f'{fit_dir}/figs/'
 
-    if not os.path.exists(spec_dir): sys.exit('\n\nspec_dir does not exist \n\t{}\n'.format(spec_dir))
-    if not os.path.exists(plt_dir) and not test:
-        try:
-            os.makedirs(plt_dir)
-        except:
-            pass
+    if not os.path.exists(spec_dir):
+        sys.stderr.write(f'does not exist: {spec_dir}\n')
+        sys.exit(1)
 
     ############ plot block
     def plt_me():
+        global pdf
+
         lwarn(); ui.notice(); ui.group_snr(1,plt_grp)
         fplot = ui.get_fit_plot()
         dmx = fplot.dataplot.x
@@ -183,7 +172,17 @@ def do_fit(args):
         yaxl= 0.25*min(mdly[np.where( (3<mdlx) & (mdlx<9) & (mdly>0) )])
         yaxh=5*max(mdly)
         xax=[1,14]; yax=[yaxl,yaxh]
+
         f,ax= plt.subplots(2,1,sharex=1)
+
+        if args.pdf and pdf is None:
+            plt_dir= os.path.dirname(args.pdf)
+            if plt_dir and not os.path.exists(plt_dir):
+                os.makedirs(plt_dir)
+            pdf = PdfPages(args.pdf)
+        else:
+            f.canvas.manager.set_window_title(ccd.upper()+f': x= {sxl}-{sxh}, y= {syl}-{syh}')
+
         my_lef=0.1; my_rt=0.95; my_bot=0.08; my_top=0.93; my_hs=0; my_ws=0.2
         f.subplots_adjust(left=my_lef, right=my_rt, bottom=my_bot, top=my_top, hspace=my_hs, wspace=my_ws)
         ## fit plot
@@ -222,9 +221,9 @@ def do_fit(args):
         ax[1].set_yscale('linear'); ax[1].set_ylim([0.5,1.5])
 
         ##
-        f.suptitle('{}_{}TG \t{} \t{:.3f}+ \t{}'.expandtabs().format(ccd.upper(),tg,e,dyear,xtra))
-        ax[0].text(0.02,0.94,'x= {}-{} \ny= {}-{}'.format(sxl,sxh,syl,syh), transform=ax[0].transAxes, va='top', ha='left')
-        ax[0].text(0.98,0.94,'-{} $^\circ$C \n{:.1f} ksec \nplot grouping SNR= {}'.format(sfpt,expo,plt_grp), transform=ax[0].transAxes, va='top', ha='right')
+        f.suptitle(f'{ccd.upper()}\t{e}\t{dyear:.3f}+'.expandtabs())
+        ax[0].text(0.02,0.94,f'x= {sxl}-{sxh} \ny= {syl}-{syh}', transform=ax[0].transAxes, va='top', ha='left')
+        ax[0].text(0.98,0.94,f'-{sfpt} $^\circ$C \n{expo:.1f} ksec \nplot grouping SNR= {plt_grp}', transform=ax[0].transAxes, va='top', ha='right')
         ax[0].set(ylabel='cnt/sec/keV')
         ax[1].set(xlabel='keV', ylabel='data/model')
         ##
@@ -265,10 +264,8 @@ def do_fit(args):
                    format(1e3*(aulb.LineE.val-aulb_nom),1e3*aulb_ehi,1e3*aulb_elo), va='bottom', ha='center',fontsize=8, c='grey')
             
             
-        if savplt==1:
-            pname= '{}/{}.pdf'.format(tdir,syl); f.savefig(pname)
-        else: plt.show()
-        plt.close()
+        if args.pdf:
+            pdf.savefig(f)
 
     ##########################################
     linfo()
@@ -294,17 +291,12 @@ def do_fit(args):
         linfo()
         xh= xl+xbin-1; sxl=str(xl).zfill(4); sxh=str(xh).zfill(4)
 
-        if savplt==1:   ## tmp dir -- new for each chipX column
-            tdir_tmp= mktempdir(dir='.')  ## tmpdir created in ./  otherwise /tmp/
-            tdir= tdir_tmp.name  ### temp dir name= tdir_tmp.name not 'tdir_tmp'!
-
-
         sicol=0
         for yl in range(ystart,1025,ybin):
             linfo()
             yh= yl+ybin-1; syl=str(yl).zfill(4); syh=str(yh).zfill(4)
 
-            pif= '{}/{}_{}-{}x_{}-{}y.pi'.format(spec_dir,ccd,sxl,sxh,syl,syh)
+            pif= f'{spec_dir}/{ccd}_{sxl}-{sxh}x_{syl}-{syh}y.pi'
             tot_cnts=0
 
             if os.path.exists(pif):
@@ -328,10 +320,10 @@ def do_fit(args):
                 if bin==64256 or bin==128256: rspx= 32
 
                 if bin==256256:
-                    rmf_fpt= '{}-{}'.format(fptv-2,fptv)
+                    rmf_fpt= f'{fptv-2}-{fptv}'
                     if fptv==120 or fptv==120118: rmf_fpt= '119-120'
                     rmf_dir= f'{basedir}/acis_response/rmf/pi_{rspx}x{rspy}y_{rmf_fpt}'
-                    rmf,= glob('{}/{}_{}-*x_{}-*y.wrmf'.format(rmf_dir, ccd, sxl, syl))
+                    rmf,= glob(f'{rmf_dir}/{ccd}_{sxl}-*x_{syl}-*y.wrmf')
 
                 if bin==32128 or bin==32256:
                     rmf_dir= '/data/hal9000/acis_response/rmf/pi_{}x{}y'.format(rspx,rspy)
@@ -351,7 +343,7 @@ def do_fit(args):
                 lwarn()
                 ui.ignore('8.0:')
                 tot_cnts=sum(ui.get_counts(filter=1))  ## get_counts MUST be w/out snr grouping!
-                print('\n\n{}\t{}C\t{}_{}TG\t{}xl\t{}yl\t{}xy\ttot_cnts= {}'.format(e,sfpt,ccd,tg,xl,yl,bin,tot_cnts))
+                print(f'\n\n{e}\t{sfpt}C\t{ccd}\t{xl}xl\t{yl}yl\t{bin}xy\ttot_cnts= {tot_cnts}')
                 ui.notice()
                 lwarn() if verbose<2 else linfo()
 
@@ -503,7 +495,7 @@ def do_fit(args):
                 ui.set_full_model(10, bkg_mdl)
 
                 ## Fit BKGND - above 8keV
-                iglo=8.0; ighi=12.5; ign=':{},{}:'.format(iglo,ighi)
+                iglo=8.0; ighi=12.5; ign=f':{iglo},{ighi}:'
                 lwarn(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                 lwarn(); ui.freeze(bkg_mdl);
                 if fitbkginitlines: ui.thaw(bkg_arr)
@@ -1231,21 +1223,10 @@ def do_fit(args):
 
 
     
-        if savplt==1:
-            pouf= '{}/{}_{}-{}.pdf'.format(plt_dir,ccd,sxl,sxh)
-            if os.listdir(tdir):
-                if glob('{}/*.pdf'.format(tdir)):
-                    os.system('pdfjam --landscape {}/*.pdf -o {}'.format(tdir,pouf))  ## make sure not empty
-            shutil.rmtree(tdir)
-
-    if savplt==1:
-        pouf= '{}/{}.pdf'.format(plt_dir,ccd)
-        if glob('{}/{}*.pdf'.format(plt_dir,ccd)):
-            os.system('pdfjam --landscape {}/{}*-*.pdf -o {}'.format(plt_dir,ccd,pouf))  ## make sure not empty
-        if glob('{}/{}_0*pdf'.format(plt_dir,ccd)):
-            os.system('rm {}/{}_0*pdf'.format(plt_dir,ccd))  ## rm individual col figs
-
-
+    if args.pdf and pdf is not None:
+        pdf.close()
+    else:
+        plt.show()
 
 ############### MAIN RUN functions ################
 
@@ -1255,6 +1236,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Fit an ECS epoch.'
     )
+    parser.add_argument('-p', '--pdf', help='Output PDF file.')
     parser.add_argument('temps', help='e.g., 120,119,118')
     parser.add_argument('binx', type=int)
     parser.add_argument('biny', type=int)
@@ -1266,36 +1248,6 @@ def main():
     args = parser.parse_args()
 
     do_fit(args)
-    sys.exit(0)
-
-    ##useful for individual ccd runs
-    if dosingle or test:
-
-        if os.path.exists(fit_dir+'/{}_ecs.txt'.format(testccd)) and clob=='no' and test==0:
-            sys.exit('\n\nfit results already exist and clobber=no \n\t{}/{}_ecs.txt\n\n'.format(fit_dir,testccd))
-        else:
-            do_fit(testccd)
-
-
-    if not test and not dosingle:
-
-        ## list of ccd's not yet run if clobb=no
-        tmp_ccd_list=[]
-        if clob=='no':
-            for ccd in ccd_list:
-                if not os.path.exists(fit_dir+'/{}_ecs.txt'.format(ccd)): tmp_ccd_list.append(ccd)
-        if clob=='yes': tmp_ccd_list= ccd_list
-    
-        if True:
-            for ccd in tmp_ccd_list:
-                do_fit(ccd)
-        else:
-            import multiprocessing
-            pool = multiprocessing.Pool(12) #sim processes, 1 per chip
-            for ccd in tmp_ccd_list:
-                pool.apply_async(do_fit, args=(ccd,))
-            pool.close(); pool.join()
-
 
 if __name__ == '__main__':
     main()
