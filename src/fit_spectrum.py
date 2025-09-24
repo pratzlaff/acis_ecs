@@ -7,7 +7,7 @@ import sys
 
 if 'ECSID' not in os.environ:
     sys.stderr.write("no ECSID environment variable, exiting\n")
-    os.exit(0)
+    sys.exit(1)
 ecsid=os.environ['ECSID']
 
 ###### Editable ######################################
@@ -516,11 +516,6 @@ def do_fit(args):
                     ui.freeze(auma.width, aumb.width, aula.width, aula_fs.width, aulb.width, nika.width, nikb.width)
                 lwarn() if verbose<2 else linfo()
                 ui.fit(10); lwarn(); ui.notice(); ui.ungroup(); ui.freeze(bkg_mdl)
-                    
-
-
-                
-
 
                 mnmaxwid=0.08
                 timaxwid= min([0.030, mnmaxwid])
@@ -1125,14 +1120,9 @@ def do_fit(args):
                     aulb_elo= -0.099; aulb_ehi=0.099      
 
 
-
-
                     
-                #################                    
+                #################
                 plt_me()
-
-
-
                 
             ########
             ## Record fitpars
@@ -1140,12 +1130,12 @@ def do_fit(args):
 
                 if opentxt==0:
                     ## open output fitpars txt
-                    oufecs= '{}/{}_ecs.txt'.format(fit_dir, ccd); fh_ecs= open(oufecs,'w')
-                    oufbkg= '{}/{}_bkg.txt'.format(fit_dir, ccd); fh_bkg= open(oufbkg,'w')
-                    oufpha= '{}/{}_pha.txt'.format(fit_dir, ccd); fh_pha= open(oufpha,'w')
+                    oufecs= f'{fit_dir}/{ccd}_ecs.txt'; fh_ecs= open(oufecs,'w')
+                    oufbkg= f'{fit_dir}/{ccd}_bkg.txt'; fh_bkg= open(oufbkg,'w')
+                    oufpha= f'{fit_dir}/{ccd}_pha.txt'; fh_pha= open(oufpha,'w')
                     
                     fmt_lines= '\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.1e}'
-                    fmt_ecs='{}\t{}\t{}\t{}' + 5*fmt_lines + '\n'
+                    fmt_ecs='{}\t{}\t{}\t{}' + 5*fmt_lines + '\t{:f}\n'
                     fmt_bkg= '{}\t{}\t{}\t{}' + '\t{:.3f}' + 8*fmt_lines + '\n'
                     fmt_pha= '{}\t{}\t{}\t{}' + 12*'\t{:.1f}' + '\t{:.0f}\n'
                     
@@ -1156,7 +1146,7 @@ def do_fit(args):
                     fh_bkg.write('#### epoch e{}\tstart= {:.3f}\tksec= {:.1f}\n'.format(e,dyear,expo))
                     fh_pha.write('#### epoch e{}\tstart= {:.3f}\tksec= {:.1f}\n'.format(e,dyear,expo))                    
                     
-                    fh_ecs.write('xl\txh\tyl\tyh\tAl_E\tAl_l\tAl_h\tAl_W\tAl_N\tTia_E\tTia_l\tTia_h\tTia_W\tTia_N\tTib_E\tTib_l\tTib_h\tTib_W\tTib_N\tMna_E\tMna_l\tMna_h\tMna_W\tMna_N\tMnb_E\tMnb_l\tMnb_h\tMnb_W\tMnb_N\n')
+                    fh_ecs.write('xl\txh\tyl\tyh\tAl_E\tAl_l\tAl_h\tAl_W\tAl_N\tTia_E\tTia_l\tTia_h\tTia_W\tTia_N\tTib_E\tTib_l\tTib_h\tTib_W\tTib_N\tMna_E\tMna_l\tMna_h\tMna_W\tMna_N\tMnb_E\tMnb_l\tMnb_h\tMnb_W\tMnb_N\tstat\n')
                     fh_ecs.flush()
                     fh_bkg.write('xl\txh\tyl\tyh\tamp\tSiKa_E\tSiKa_l\tSiKa_h\tSiKa_W\tSiKa_N\tAuMa_E\tAuMa_l\tAuMa_h\tAuMa_W\tAuMa_N\tAuMb_E\tAuMb_l\tAuMb_h\tAuMb_W\tAuMb_N\tNiKa_E\tNiKa_l\tNiKa_h\tNiKa_W\tNiKa_N\tNiKb_E\tNiKb_l\tNiKb_h\tNiKb_W\tNiKb_N\tAuLa_E\tAuLa_l\tAuLa_h\tAuLa_W\tAuLa_N\tAuFS_E\tAuFS_l\tAuFS_h\tAuFS_W\tAuFS_N\tAuLb_E\tAuLb_l\tAuLb_h\tAuLb_W\tAuLb_N\n')
                     fh_bkg.flush()
@@ -1201,7 +1191,7 @@ def do_fit(args):
                                                 tika1.LineE.val,tika1_elo,tika1_ehi,tika1.width.val,tika1.norm.val,
                                                 tikb.LineE.val,tikb_elo,tikb_ehi,tikb.width.val,tikb.norm.val,
                                                 mnka1.LineE.val,mnka1_elo,mnka1_ehi,mnka1.width.val,mnka1.norm.val,
-                                                mnkb.LineE.val,mnkb_elo,mnkb_ehi,mnkb.width.val,mnkb.norm.val))
+                                                mnkb.LineE.val,mnkb_elo,mnkb_ehi,mnkb.width.val,mnkb.norm.val, ui.calc_stat()))
                     fh_bkg.write(fmt_bkg.format(xl,xh,yl,yh,bkg_arr.ampl.val,
                                                 sika.LineE.val,sika_elo,sika_ehi,sika.width.val,sika.norm.val,
                                                 auma.LineE.val,auma_elo,auma_ehi,auma.width.val,auma.norm.val,
@@ -1224,7 +1214,7 @@ def do_fit(args):
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,
-                                            9.999,-0.099,0.099,0.999,9.9e9))
+                                            9.999,-0.099,0.099,0.999,9.9e9, np.nan))
                     fh_bkg.write(fmt_bkg.format(xl,xh,yl,yh,999,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,

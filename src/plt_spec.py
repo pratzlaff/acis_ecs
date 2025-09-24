@@ -49,6 +49,7 @@ def plt_spec(args):
     def plt_stuff():
 
         f,ax= plt.subplots(4,1,sharex=1,sharey=1)
+        f.canvas.manager.set_window_title(ccd.upper())
         my_lef=0.1; my_rt=0.95; my_bot=0.08; my_top=0.93; my_hs=0; my_ws=0.2
         f.subplots_adjust(left=my_lef, right=my_rt, bottom=my_bot, top=my_top, hspace=my_hs, wspace=my_ws)
         c=['cyan','red','orange','lime']; fmt=['+','o','s','d']
@@ -129,8 +130,6 @@ def plt_spec(args):
         plt.tight_layout()
         if args.pdf:
             pdf.savefig(f)
-        else:
-            plt.show()
 
     ## end of plt_stuff()
 
@@ -169,7 +168,7 @@ def plt_spec(args):
                 inf= f'/data/legs/rpete/data/ECS/fits/ciao4.17.0_caldb4.12.2/e{e:03d}/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
                 inf= f'/data/legs/rpete/data/ECS/e{e:03d}/fits/ciao4.17.0_caldb4.12.2/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
                 if os.path.exists(inf):
-                    (xl_tmp,yl_tmp,al,al_lo,al_hi,mn,mn_lo,mn_hi)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21])
+                    (xl_tmp,yl_tmp,al,al_lo,al_hi,mn,mn_lo,mn_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21,-1])
 
                     if mtl=='Al':
                         li= al; li_lo= al_lo; li_hi= al_hi
@@ -238,6 +237,8 @@ def plt_spec(args):
 
     if args.pdf:
         pdf.close()
+    else:
+        plt.show()
 
 def main():
     parser = argparse.ArgumentParser(
