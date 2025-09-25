@@ -10,7 +10,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 def plt_prefs():
     plt.rc('ytick', direction='in', color='gray', right=1)
     plt.rc('xtick', direction='in', color='gray', top=1)
-    plt.rc('legend', fontsize='small', frameon=1, loc='upper left')
+    plt.rc('legend', fontsize='small', frameon=1, loc='center left')
     plt.rc('figure', labelsize='small', figsize=[9,6.5])
     plt.rc('axes', labelsize='small')
     plt.rc('lines', markerfacecolor='none')    ## always non-filled markers
@@ -97,22 +97,16 @@ def plt_spec(args):
         if mtl=='Mn':
             vmin= -80; vmax=80
 
-        vlines = {
-            ''          : ['2021-11-01', '2022-08-02'],
-            '_v772025'  : ['2021-11-01', '2022-09-15', '2024-01-15'],
-            '_v7232025' : ['2021-11-01', '2022-09-15', '2023-03-01', '2023-12-15', '2024-10-15'],
-        }
-        for key in '_v7242025', '_v7252025':
-            vlines[key] = vlines['_v7232025']
+        vlines = ['2021-11-01', '2022-09-15', '2023-03-01', '2023-12-15', '2024-10-15']
 
         for i in range(4):
-            label=None
-            for date in vlines[xtra]:
-                if i==1:
-                    label=date+' gain'
+            for j, date in enumerate(vlines):
+                label = None
+                if j==0 and i==1:
+                    label='tgain begins'
                 ax[i].vlines(datetime.strptime(date,dfmt),vmin,vmax,color='blue',label=label,lw=0.5,ls='--')
             
-        f.suptitle(f'ECS {mtl}-Ka LineE -{temps.max()}:-{temps.min()-1}C -- {ccd.upper()} -- 256x256y \t\t{xtra_label}'.expandtabs())
+        f.suptitle(f'ECS {mtl}-Ka LineE -{temps.max()}.19:-{temps.min()-1}.19C -- {ccd.upper()} -- 256x256y \t\t{xtra_label}'.expandtabs())
         for i in range(4):
             ax[i].set_ylabel(f'node{i}')
 
@@ -125,7 +119,7 @@ def plt_spec(args):
         z=ax[0].get_yticks()   ##; print(z)
         newz=[z[1],z[2],z[3]]; ax[0].set_yticks(newz)
         ax[0].legend()
-        ax[1].legend()    
+        ax[1].legend(loc='lower left', frameon=False)
 
         plt.tight_layout()
         if args.pdf:
@@ -166,7 +160,7 @@ def plt_spec(args):
                 e_date = datetime.strptime(date_str, dfmt)
                 ## grab Al/Mn
                 inf= f'/data/legs/rpete/data/ECS/fits/ciao4.17.0_caldb4.12.2/e{e:03d}/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
-                inf= f'/data/legs/rpete/data/ECS/e{e:03d}/fits/ciao4.17.0_caldb4.12.2/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
+                inf= f'/data/legs/rpete/data/ECS/e{e:03d}/fits/{os.environ["ECSID"]}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
                 if os.path.exists(inf):
                     (xl_tmp,yl_tmp,al,al_lo,al_hi,mn,mn_lo,mn_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21,-1])
 
