@@ -202,14 +202,11 @@ def do_fit(args):
         ax[0].plot(xcomp, yaul, '--', c='magenta', lw=lw2)                        
 
         ## plot narrow-window fit bounds
-        ax[0].hlines(0.9*yaxh,mn_iglo,mn_ighi,color='blue',lw=2)
-        ax[0].hlines(0.9*yaxh,mnb_iglo,mnb_ighi,color='blue',lw=2)
-        ax[0].hlines(0.9*yaxh,ti_iglo,ti_ighi,color='blue',lw=2)
-        ax[0].hlines(0.9*yaxh,tib_iglo,tib_ighi,color='blue',lw=2)
-        ax[0].hlines(0.9*yaxh,al_iglo,al_ighi,color='blue',lw=2)
-        ax[0].hlines(0.9*yaxh,si_iglo,si_ighi,color='blue',lw=2)
+        ax[0].hlines(0.9*yaxh,mn_iglo,mn_ighi,color='blue',lw=1)
+        ax[0].hlines(0.85*yaxh,ti_iglo,ti_ighi,color='blue',lw=1)
+        ax[0].hlines(0.9*yaxh,al_iglo,al_ighi,color='blue',lw=1)
+        ax[0].hlines(0.85*yaxh,si_iglo,si_ighi,color='blue',lw=1)
 
-        
         ## ratio plot
         ax[1].step(prat.x, prat.y, '-', c='orange', lw=lw1,zorder=100, where='mid')
         ax[1].axhline(1, c='black', lw=0.5, ls='--')
@@ -290,16 +287,12 @@ def do_fit(args):
     ####################################################################
     for xl in range(xstart,1025,xbin):
         linfo()
-        xh= xl+xbin-1;
-        sxl=f'{xl:04d}'
-        sxh=f'{xh:04d}'
+        xh= xl+xbin-1; sxl=str(xl).zfill(4); sxh=str(xh).zfill(4)
 
         sicol=0
         for yl in range(ystart,1025,ybin):
             linfo()
-            yh= yl+ybin-1
-            syl=f'{yl:04d}'
-            syh=f'{yh:04d}'
+            yh= yl+ybin-1; syl=str(yl).zfill(4); syh=str(yh).zfill(4)
 
             pif= f'{spec_dir}/{ccd}_{sxl}-{sxh}x_{syl}-{syh}y.pi'
             tot_cnts=0
@@ -321,7 +314,7 @@ def do_fit(args):
 
                 tmin = np.array([int(t) for t in tstr.split('-')]).max()
                 rmf_fpt = f'{tmin-1}-{tmin}' if tmin==120 else f'{tmin-2}-{tmin}'
-                rmf_dir= f'{basedir}/acis_response/rmf/pi_{rspx}x{rspy}y_{rmf_fpt}'
+                rmf_dir= f'{basedir}/acis_response/rmf/pi_{xbin}x{ybin}y_{rmf_fpt}'
                 rmf,= glob(f'{rmf_dir}/{ccd}_{sxl}-*x_{syl}-*y.wrmf')
 
                 arf_date= '{}-09-01'.format(round(dyear))
@@ -345,16 +338,14 @@ def do_fit(args):
                 fitaum=0; fitnikb=0; fitaufs=0
 
             #fitbkginitlines=0; fitinit=0; fitmn=0; fitti=0; fital=0; fitsi=0; fitaum=0; fitnika=0; fitnikb=0; fitaula=0; fitaufs=0; fitaulb=0
-            
-
 
             if tot_cnts>cnt_thresh:
 
                 fit_grp=2; plt_grp=2
+                if tot_cnts<200: fit_grp=1
                 if tot_cnts>1000: plt_grp=3
                 if tot_cnts>4000: plt_grp=4
 
-                
                 ## run conf errors switches
                 doerr=0  ## reset each run
                 if test==0:
@@ -364,10 +355,6 @@ def do_fit(args):
                 if bin==256256 and yl==769 and toperr==1: doerr=1
                 if allerr: doerr=1
 
-
-
-
-                
                 ##################
                 ## apprx scaling for initial line norms
                 l= np.log(2)/2.737
@@ -567,31 +554,19 @@ def do_fit(args):
                     ## untie Mn-Kb from Ka
                     val= mnka1.LineE.val+mnkb_nom-mnka1_nom
                     ui.set_par(mnkb.LineE, val, min= val-0.02, max= val+0.02)
-                    val= mnka1.width.val; ui.set_par(mnkb.Width, val, min= 0.001, max= mnmaxwid)                    
-                    mnkb.norm= mnkb.norm.val
+                    val= mnka1.width.val; ui.set_par(mnkb.Width, val, min= 0.001, max= val+0.005)
+                    val= mnka1.norm.val*0.21; ui.set_par(mnkb.norm, val, min=0.15*mnka1.norm.val, max=0.25*mnka1.norm.val)
 
-                    ## fit untied Mna/b
-                    mn_iglo= mnka1.LineE.val-0.1; mn_ighi=mnkb.LineE.val+0.1; ign=':{},{}:'.format(mn_iglo,mn_ighi)
+                    
+                    mn_iglo=5.2; mn_ighi=7.1; ign=':{},{}:'.format(mn_iglo,mn_ighi)
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnka1, mnka2, mnkb)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
-                    
-                    ## FWHM of Mna
-                    tmp= ui.get_model_component_plot(mnka1+mnka2)
-                    mdlx=tmp.xlo; mdly= tmp.y; idx,= np.where(mdly>0.5*max(mdly))
-                    mna_fwhm= mdlx[idx[-1]] - mdlx[idx[0]]
 
-                    ## Mna-only tight window fit +- fw 1/4 m ## shape of rsp wonky for large noTG tiles... -- only for tot_cnts>4000
-                    fwhm_fact=2
-                    if tot_cnts>4000: fwhm_fact= 0.5
-                    mn_iglo= mnka1.LineE.val-mna_fwhm*fwhm_fact; mn_ighi=mnka1.LineE.val+mna_fwhm*fwhm_fact; ign=':{},{}:'.format(mn_iglo,mn_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnka1, mnka2)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
                     ## Mna errors
                     if doerr==1:
+                        ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnka1, mnka2)
                         try:
                             ui.set_method('levmar')
                             iglo=mnka1.LineE.val-0.8; ighi=mnka1.LineE.val+1.2; ign=':{},{}:'.format(iglo,ighi)
@@ -617,17 +592,9 @@ def do_fit(args):
                     if errh==0.099: doerr=0  ## turn off err if Mn is bad
                     mnka1_elo= errl; mnka1_ehi=errh                    
 
-                    ## Mnb-only fit, using fwhm wide window
-                    val= mnka1.LineE.val+mnkb_nom-mnka1_nom
-                    ui.set_par(mnkb.LineE, val, min= val-0.02, max= val+0.02)
-                    val= mnka1.width.val; ui.set_par(mnkb.Width, val, min= 0.001, max= mnmaxwid)
-                    val= mnka1.norm.val*0.21; ui.set_par(mnkb.norm, val, min=0.15*mnka1.norm.val, max=0.25*mnka1.norm.val)
-
-                    mnb_iglo= mnkb.LineE.val-mna_fwhm*fwhm_fact*2; mnb_ighi=mnkb.LineE.val+mna_fwhm*fwhm_fact*2; ign=':{},{}:'.format(mnb_iglo,mnb_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnkb); ui.freeze(mnkb.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
+                    ## Mnb errors
+                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnkb)
+                    lwarn()
                     ## Mnb errors
                     if doerr==1:
                         try:
@@ -666,24 +633,15 @@ def do_fit(args):
                     ## untie Kb from Ka
                     val= tika1.LineE.val+tikb_nom-tika1_nom
                     ui.set_par(tikb.LineE, val, min= val-0.02, max= val+0.02)
-                    val= tika1.Width.val; ui.set_par(tikb.Width, val, min= 0.001, max= timaxwid)
-                    tikb.norm= tikb.norm.val
+                    val= tika1.Width.val; ui.set_par(tikb.Width, val, min= 0.001, max= val+0.005)
+                    val= 0.201*tika1.norm.val; ui.set_par(tikb.norm, val, min=0.15*tika1.norm.val, max=0.30*tika1.norm.val)
 
-                    
-                    ## fit untied Ka/b
-                    ti_iglo= tika1.LineE.val-0.1; ti_ighi=tikb.LineE.val+0.1; ign=':{},{}:'.format(ti_iglo,ti_ighi)
+                    ti_iglo=4.0; ti_ighi=5.5; ign=':{},{}:'.format(ti_iglo,ti_ighi)
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(tika1, tika2, tikb)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
                     
-                    
-                    ## Tia-only tight window fwhm
-                    ti_iglo= tika1.LineE.val-mna_fwhm*fwhm_fact*2; ti_ighi=tika1.LineE.val+mna_fwhm*fwhm_fact*2; ign=':{},{}:'.format(ti_iglo,ti_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(tika1, tika2); ui.freeze(tika1.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
                     ## Tia errors
                     if doerr==1:
                         try:
@@ -710,17 +668,7 @@ def do_fit(args):
                         errl=-0.099; errh=0.099
                     tika1_elo= errl; tika1_ehi=errh                    
                                     
-                    ## Tib-only fit, using fw1/4m wide window
-                    val= tika1.LineE.val+tikb_nom-tika1_nom
-                    ui.set_par(tikb.LineE, val, min= val-0.02, max= val+0.02)
-                    tikb.width= tika1.width.val
-                    val= 0.201*tika1.norm.val; ui.set_par(tikb.norm, val, min=0.15*tika1.norm.val, max=0.30*tika1.norm.val)
-
-                    tib_iglo= tikb.LineE.val-mna_fwhm*fwhm_fact*2; tib_ighi=tikb.LineE.val+mna_fwhm*fwhm_fact*2; ign=':{},{}:'.format(tib_iglo,tib_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(tikb); ui.freeze(tikb.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
                     ## Tib errors
                     if doerr==1:
                         try:
@@ -758,9 +706,8 @@ def do_fit(args):
                     ## untie Si from Al
                     sika.LineE= alka.LineE.val +sika_nom-alka_nom; sika.Width= alka.width.val; sika.norm= sika.norm.val
                     sikb.LineE= alka.LineE.val +sikb_nom-alka_nom; sikb.Width= alka.width.val; sikb.norm= sikb.norm.val                    
-                   
                     ## Al-only tight window fwhm
-                    al_iglo= alka.LineE.val-mna_fwhm; al_ighi=alka.LineE.val+mna_fwhm; ign=':{},{}:'.format(al_iglo,al_ighi)                    
+                    al_iglo= 1.2; al_ighi=2.0; ign=':{},{}:'.format(al_iglo,al_ighi)
 
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(alka, alkb); ui.freeze(alka.width)
