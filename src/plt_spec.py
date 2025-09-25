@@ -7,6 +7,8 @@ import os
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+ecsid=os.environ['ECSID']
+
 def plt_prefs():
     plt.rc('ytick', direction='in', color='gray', right=1)
     plt.rc('xtick', direction='in', color='gray', top=1)
@@ -106,7 +108,8 @@ def plt_spec(args):
                     label='tgain begins'
                 ax[i].vlines(datetime.strptime(date,dfmt),vmin,vmax,color='blue',label=label,lw=0.5,ls='--')
             
-        f.suptitle(f'ECS {mtl}-Ka LineE -{temps.max()}.19:-{temps.min()-1}.19C -- {ccd.upper()} -- 256x256y \t\t{xtra_label}'.expandtabs())
+        f.suptitle(f'ECS {mtl}-Ka LineE -{temps.max()}.19:-{temps.min()-1}.19C -- {ccd.upper()} -- 256x256y \t\t{ecsid}'.expandtabs())
+        f.supylabel('LineE shift [eV]')
         for i in range(4):
             ax[i].set_ylabel(f'node{i}')
 
@@ -160,7 +163,7 @@ def plt_spec(args):
                 e_date = datetime.strptime(date_str, dfmt)
                 ## grab Al/Mn
                 inf= f'/data/legs/rpete/data/ECS/fits/ciao4.17.0_caldb4.12.2/e{e:03d}/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
-                inf= f'/data/legs/rpete/data/ECS/e{e:03d}/fits/{os.environ["ECSID"]}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
+                inf= f'/data/legs/rpete/data/ECS/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
                 if os.path.exists(inf):
                     (xl_tmp,yl_tmp,al,al_lo,al_hi,mn,mn_lo,mn_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21,-1])
 
