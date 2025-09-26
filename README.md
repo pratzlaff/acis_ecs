@@ -42,7 +42,7 @@ tstr=120,119,118
 binx=256
 biny=256
 src/extract_spectra_parallel $tstr $binx $biny $epochs
-``
+```
 and those spectra end up in `$datadir/e{epoch:03d}/fits/$ECSID/spec/` subdirectories.
 
 To fit those spectra,
