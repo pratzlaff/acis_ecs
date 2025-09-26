@@ -4,9 +4,8 @@ set -eo pipefail
 
 epochs="$@"
 
-basedir=/data/legs/rpete/data/ECS
-
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+. $SCRIPTDIR/process_epoch_functions.sh
 
 . ~/.bash_aliases
 shopt -s expand_aliases nocasematch
@@ -28,7 +27,7 @@ for epoch in $epochs; do
     epoch=$(printf %d $((10#"$epoch")))
     epoch_str=$(printf %03d $((10#"$epoch")))
 
-    edir="$basedir/e$epoch_str"
+    edir="$datadir/e${epoch_str}"
     echo -e "\n*** Downloading epoch $epoch_str to $edir ***\n"
 
     mkdir -p "$edir"

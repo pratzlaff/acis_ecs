@@ -2,12 +2,6 @@
 
 set -eo pipefail
 
-# merge dir is /data/legs/rpete/data/ECS/e${epoch}/merge/$ECSID
-[ -z "$ECSID" ] && {
-    \echo "\$ECSID is not set, exiting" 1>&2
-    exit 1
-}
-
 epochs="$@"
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
