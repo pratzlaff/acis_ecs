@@ -13,15 +13,14 @@ src/download_epochs $epochs
 Downloaded files end up in `$datadir/e{epoch:03d}`, where `$datadir` is set in
 `src/process_epoch_functions.sh`
 
-To reprocess obsids in each epoch with current CALDB,
+To reprocess obsids in each epoch with current CalDB,
 ```
 src/process_epochs $epochs
 ```
 `src/process_epochs` looks at environment variables `TGAIN`, `TGAINFILE`, `CTI`, `CTIFILE` and applies
-options `apply_(tgain|cti)` and `(tgain|cti)file` appropriately to `acis_process_events`.
+the appropriate `apply_(tgain|cti)` and `(tgain|cti)file` parameters to `acis_process_events`.
 
-To merge the various temperatures and CCDs from each ObsID in the
-epochs
+To merge the various temperatures and CCDs from each ObsID in the epochs,
 ```
 ciao
 export ECSID=$(src/ciaostr)
@@ -30,10 +29,10 @@ src/merge_epochs $epochs
 
 The output files in up in `$datadir/e{epoch:03d}/merge/$ECSID`
 
-After this the `repro` files for each ObsID are unneeded, and require a
-good deal of disk space, so they can usually be deleted.
+After this step, the `repro` files for each ObsID are unneeded, and occupy a
+large amount of disk space, so they can usually be deleted.
 
-Further, comressing the merge `evt2` files can reduce their footprint
+Further, compressing the merge `evt2` files can reduce their footprint
 by 70% or so.
 
 To extract spectra for a specific temperature range and chip binning, e.g.,
