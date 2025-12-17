@@ -27,26 +27,30 @@ export ECSID=$(src/ciaostr)
 src/merge_epochs $epochs
 ```
 
-The output files in up in `$datadir/e{epoch:03d}/merge/$ECSID`
+The output files end up in `$datadir/e{epoch:03d}/merge/$ECSID`
 
 After this step, the `repro` files for each ObsID are unneeded, and occupy a
 large amount of disk space, so they can usually be deleted.
 
-Further, compressing the merge `evt2` files can reduce their footprint
-by 70% or so.
+Further, compressing the merge `evt2` files can reduce their size by
+70% or so.
 
 To extract spectra for a specific temperature range and chip binning, e.g.,
 ```
-tstr=120,119,118
+tstrs='120,119,118 117,116 115,114 113,112 111,110 109,108 107,106'
 binx=256
 biny=256
-src/extract_spectra_parallel $tstr $binx $biny $epochs
+time for tstr in $tstrs; do
+    src/extract_spectra_parallel $tstr $binx $biny $epochs
+done
 ```
 and those spectra end up in `$datadir/e{epoch:03d}/fits/$ECSID/spec/` subdirectories.
 
 To fit those spectra,
 ```
-src/fit_epochs $tstr $binx $biny $epochs
+time for tstr in $tstrs; do
+    src/fit_epochs $tstr $binx $biny $epochs
+done
 ```
 
 Finally, to plot fitted line energy deviations (currently 256x256y),
