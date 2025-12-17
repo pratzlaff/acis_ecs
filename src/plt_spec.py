@@ -8,6 +8,8 @@ from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 ecsid=os.environ['ECSID']
+srcdir=os.path.dirname(__file__)
+datadir=os.popen(srcdir+'/datadir').read()
 
 def plt_prefs():
     plt.rc('ytick', direction='in', color='gray', right=1)
@@ -162,8 +164,7 @@ def plt_spec(args):
                 date_str = f'{year:04d}-{month+1:02d}-{15}'
                 e_date = datetime.strptime(date_str, dfmt)
                 ## grab Al/Mn
-                inf= f'/data/legs/rpete/data/ECS/fits/ciao4.17.0_caldb4.12.2/e{e:03d}/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
-                inf= f'/data/legs/rpete/data/ECS/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
+                inf=f'{datadir}/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
                 if os.path.exists(inf):
                     (xl_tmp,yl_tmp,al,al_lo,al_hi,mn,mn_lo,mn_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21,-1])
 

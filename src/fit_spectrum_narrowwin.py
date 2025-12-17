@@ -9,6 +9,8 @@ if 'ECSID' not in os.environ:
     sys.stderr.write("no ECSID environment variable, exiting\n")
     sys.exit(1)
 ecsid=os.environ['ECSID']
+srcdir=os.path.dirname(__file__)
+datadir=os.popen(srcdir+'/datadir').read()
 
 ###### Editable ######################################
 
@@ -131,11 +133,10 @@ def do_fit(args):
 
     ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
 
-    basedir = '/data/legs/rpete/data/ECS'
     tstr = args.temps.replace(',', '-')
     sfpt = tstr
-    spec_dir = f'{basedir}/e{e}/fits/{ecsid}/spec/fpt_{tstr}_{xbin}x{ybin}y'
-    fit_dir= f'{basedir}/e{e}/fits/{ecsid}/fits/fpt_{tstr}_{xbin}x{ybin}y'
+    spec_dir = f'{datadir}/e{e}/fits/{ecsid}/spec/fpt_{tstr}_{xbin}x{ybin}y'
+    fit_dir= f'{datadir}/e{e}/fits/{ecsid}/fits/fpt_{tstr}_{xbin}x{ybin}y'
 
     if not os.path.exists(fit_dir):
         os.makedirs(fit_dir)
@@ -321,13 +322,13 @@ def do_fit(args):
 
                 tmin = np.array([int(t) for t in tstr.split('-')]).max()
                 rmf_fpt = f'{tmin-1}-{tmin}' if tmin==120 else f'{tmin-2}-{tmin}'
-                rmf_dir= f'{basedir}/acis_response/rmf/pi_{rspx}x{rspy}y_{rmf_fpt}'
+                rmf_dir= f'{datadir}/acis_response/rmf/pi_{rspx}x{rspy}y_{rmf_fpt}'
                 rmf,= glob(f'{rmf_dir}/{ccd}_{sxl}-*x_{syl}-*y.wrmf')
 
                 arf_date= '{}-09-01'.format(round(dyear))
                 if dyear>2024: arf_date='2024-09-01'
                 arf_dir= '/data/hal9000/acis_response/arf/{}/{}x{}y/HRMA1'.format(arf_date,xbin,ybin)
-                arf_dir= f'{basedir}/acis_response/arf/{arf_date}/{xbin}x{ybin}y/HRMA1'
+                arf_dir= f'{datadir}/acis_response/arf/{arf_date}/{xbin}x{ybin}y/HRMA1'
                 arf,= glob('{}/{}_{}-*x_{}-*y.warf'.format(arf_dir, ccd, sxl, syl))
 
                 ui.load_rmf(rmf); ui.load_arf(arf)
@@ -429,7 +430,7 @@ def do_fit(args):
                 if yl>768: byl=769
                 ##
                 ui.copy_data(1,10) ## avoids issues
-                bgf,= glob(f'{basedir}/acis_bkg/s04_final_models_nolines/{bccd}_{byear}_{byl}-*y.dat')
+                bgf,= glob(f'{datadir}/acis_bkg/s04_final_models_nolines/{bccd}_{byear}_{byl}-*y.dat')
                 ui.load_table_model('bkg_arr',bgf)
                 unit_arf = ui.get_arf(10)
                 unit_arf.specresp = np.ones_like(unit_arf.specresp)

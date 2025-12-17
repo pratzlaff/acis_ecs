@@ -1,7 +1,9 @@
 #! /bin/bash
 
-datadir=/data/legs/rpete/data/ECS
-lookuptab=/data/legs/rpete/flight/acis_ecs/data/dmmerge_lookupTab.txt
+SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+datadir=$("$SCRIPTDIR"/datadir)
+lookuptab="$SCRIPTDIR"/../data/dmmerge_lookupTab.txt
 
 # given year and month, return the epoch number
 epoch() {
