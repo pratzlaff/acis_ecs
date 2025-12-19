@@ -17,8 +17,7 @@ To reprocess obsids in each epoch with current CalDB,
 ```
 src/process_epochs $epochs
 ```
-`src/process_epochs` looks at environment variables `TGAIN`, `TGAINFILE`, `CTI`, `CTIFILE` and applies
-the appropriate `apply_(tgain|cti)` and `(tgain|cti)file` parameters to `acis_process_events`.
+`src/process_epochs` looks at environment variables `TGAIN`, `TGAINFILE`, `CTI`, `CTIFILE` and applies the appropriate `apply_{tgain,cti}` and `{tgain,cti}file` parameters to `acis_process_events`.
 
 To merge the various temperatures and CCDs from each ObsID in the epochs,
 ```
