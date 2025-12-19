@@ -38,5 +38,5 @@ rm -rf "$outdir"
 mkdir -p "$outdir"
 merge_epoch "$outdir" "$epoch" 2>&1 | tee "$outdir"/merge.log
 
-parallel -j 32 gzip "$outdir"/*.evt2
-rm -rf "$datadir/e${epoch}"/[0-9]*/repro
+parallel -j 32 gzip ::: "$outdir"/*.evt2
+#rm -rf "$datadir/e${epoch}"/[0-9]*/repro
