@@ -225,11 +225,11 @@ def do_fit(args):
         ##
         f.suptitle(f'{ccd.upper()}\t{e}\t{dyear:.3f}+'.expandtabs())
         ax[0].text(0.02,0.94,f'x= {sxl}-{sxh} \ny= {syl}-{syh}', transform=ax[0].transAxes, va='top', ha='left')
-        ax[0].text(0.98,0.94,f'-{sfpt} $^\circ$C \n{expo:.1f} ksec \nplot grouping SNR= {plt_grp}', transform=ax[0].transAxes, va='top', ha='right')
+        ax[0].text(0.98,0.94,f'-{sfpt} $^\\circ$C \n{expo:.1f} ksec \nplot grouping SNR= {plt_grp}', transform=ax[0].transAxes, va='top', ha='right')
         ax[0].set(ylabel='cnt/sec/keV')
         ax[1].set(xlabel='keV', ylabel='data/model')
         ##
-        ax[0].text(xax[1]*0.01,yaxl*1.2,'$\Delta$ eV', va='bottom', ha='left',fontsize=10)
+        ax[0].text(xax[1]*0.01,yaxl*1.2,r'$\Delta$ eV', va='bottom', ha='left',fontsize=10)
 
         ##
         line1= 1.1; line2= 1.7
