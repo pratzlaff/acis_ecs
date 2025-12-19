@@ -57,6 +57,7 @@ extract_spectra() {
     local merge_lis_outdir="$merge_outdir/merge_lis"
     
     # might have already merged this epoch's evt2 for this temperature range
+    rm -rf "$merge_outdir"
     [ -d "$merge_outdir" ] || {
 	mkdir -p "$merge_lis_outdir"
 	for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
@@ -85,9 +86,9 @@ extract_spectra() {
     rm -rf "$spec_dir"
     mkdir -p "$spec_dir"
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
-	evt="${merge_outdir}/${ccd}.evt2"
-	[ -f "$evt" ] || continue
-	echo extracting from $evt
+	evt=$(\ls "${merge_outdir}/${ccd}.evt2"?(.gz) 2>/dev/null || :)
+	[ -n "$evt" ] || continue
+	echo extracting from "$evt"
 	for x in $(seq 1 $binx 1024); do
 	    xl=$(printf %04d $x)
 	    xh=$(printf %04d $(( x+binx-1 )))
