@@ -219,7 +219,7 @@ merge_epoch() {
     for ccd in i{0,1,2,3} s{0,1,2,3,4,5}; do
 	for t in $(seq 101 120); do
 	    outf="e${e}_${ccd}_${t}.evt2"
-	    globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${t}_${ccd}.evt2"
+	    globstr="$datadir/e${e}/[0-9][0-9][0-9][0-9][0-9]/repro/[0-9][0-9][0-9][0-9][0-9]_${t}_${ccd}.evt2?(.gz)"
 	    inevt2=$(\ls $globstr 2>/dev/null || :)
 	    [ -z "$inevt2" ] || {
 		nfiles=$(wc -l <<<"$inevt2")
@@ -230,12 +230,14 @@ merge_epoch() {
 		    cp -a "$inevt2" "$outf"
 		} || {
 		    punlearn dmmerge
+		    # FIXME: dmmerge '@/data/legs/rpete/data/ECS/e097/merge/ciao4.18.0_caldb4.12.3/merge_lis/merge_i2_107.lis[events][subspace -expno]' outfile=/data/legs/rpete/data/ECS/e097/merge/ciao4.18.0_caldb4.12.3/e097_i2_107.evt2 lookupTab=/data/legs/rpete/flight/acis_ecs/src/../data/dmmerge_lookupTab.txt mode=h cl+
+		    # dmmerge (CIAO 4.18.0): ERROR:  File # 3 (PHAS column) : data type or array size of column not match!
 		    dmmerge \
 			"@${mergef}[events][subspace -expno]" \
 			outfile="$outf" \
 			lookupTab="$lookuptab" \
 			mode=h \
-			cl+
+			cl+ || :
 		}
 	    }
 	done
