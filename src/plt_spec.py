@@ -3,6 +3,7 @@ from datetime import datetime,timedelta
 from glob import glob
 import numpy as np
 import os
+import sys
 
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -10,6 +11,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 ecsid=os.environ['ECSID']
 srcdir=os.path.dirname(__file__)
 datadir=os.popen(srcdir+'/datadir').read()
+
+ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
 
 def plt_prefs():
     plt.rc('ytick', direction='in', color='gray', right=1)
@@ -132,7 +135,6 @@ def plt_spec(args):
 
     ## end of plt_stuff()
 
-    ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
     for ccd in ccd_list:
 
         for mtl in [args.line]: #'Al']: #,'Mn']:
@@ -165,7 +167,7 @@ def plt_spec(args):
                 e_date = datetime.strptime(date_str, dfmt)
                 ## grab Al/Mn
                 inf=f'{datadir}/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
-                if os.path.exists(inf):
+                try:
                     (xl_tmp,yl_tmp,al,al_lo,al_hi,mn,mn_lo,mn_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21,-1])
 
                     if mtl=='Al':
@@ -204,6 +206,8 @@ def plt_spec(args):
                                 li1y4= np.append(li1y4, li[n1]); li1y4_lo= np.append(li1y4_lo, li_lo[n1]); li1y4_hi= np.append(li1y4_hi, li_hi[n1])
                                 li2y4= np.append(li2y4, li[n2]); li2y4_lo= np.append(li2y4_lo, li_lo[n2]); li2y4_hi= np.append(li2y4_hi, li_hi[n2])
                                 li3y4= np.append(li3y4, li[n3]); li3y4_lo= np.append(li3y4_lo, li_lo[n3]); li3y4_hi= np.append(li3y4_hi, li_hi[n3])   
+                except:
+                    raise
 
             ## abs for lower err
             li0y1_lo= np.abs(li0y1_lo); li1y1_lo= np.abs(li1y1_lo); li2y1_lo= np.abs(li2y1_lo); li3y1_lo= np.abs(li3y1_lo)
@@ -239,6 +243,7 @@ def plt_spec(args):
         plt.show()
 
 def main():
+    global ccd_list
     parser = argparse.ArgumentParser(
         description='Plot fit results'
     )
@@ -246,11 +251,11 @@ def main():
     parser.add_argument('temps', help='e.g., 120,119,118')
     parser.add_argument('line', choices=['Al', 'Mn'])
     parser.add_argument('epochs', type=int, nargs='+')
+    parser.add_argument('--det', choices=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5'], nargs='+')
     args = parser.parse_args()
-
+    if args.det is not None:
+        ccd_list = args.det
     plt_spec(args)
 
 if __name__ == '__main__':
     main()
-
-
