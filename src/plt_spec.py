@@ -1,12 +1,11 @@
 import argparse
 from datetime import datetime,timedelta
 from glob import glob
+from matplotlib import pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import os
 import sys
-
-from matplotlib import pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 
 ecsid=os.environ['ECSID']
 srcdir=os.path.dirname(__file__)

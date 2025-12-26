@@ -241,9 +241,6 @@ merge_epoch() {
 	done
     done
 
-    #mkdir -p merge_lis
-    #mv merge_*.lis merge_lis
-
     cd -
 }
 

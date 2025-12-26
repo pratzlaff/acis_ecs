@@ -39,5 +39,5 @@ for e in $epochs; do
 done
 
 ccds=$( echo i{0,1,2,3} s{0,1,2,3,4,5} )
-parallel -j 32 python "$srcdir/fit_spectrum_widewin.py" -p "$pdfpre"{1}"$pdfpost"{2}.pdf $tstr $binx $biny {1} {2} ::: $epochs ::: $ccds
+parallel -j 16 python "$srcdir/fit_spectrum_widewin.py" -p "$pdfpre"{1}"$pdfpost"{2}.pdf $tstr $binx $biny {1} {2} ::: $epochs ::: $ccds
 

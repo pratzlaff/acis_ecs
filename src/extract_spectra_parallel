@@ -26,5 +26,5 @@ SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 extract_spectra="$SCRIPTDIR/extract_spectra"
 
-parallel -j 16 $extract_spectra $tstr $binx $biny ::: $epochs
+parallel -j 32 $extract_spectra $tstr $binx $biny ::: $epochs
 
