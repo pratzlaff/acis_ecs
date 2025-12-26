@@ -11,7 +11,7 @@ src/download_epochs $epochs
 ```
 
 Downloaded files end up in `$datadir/e{epoch:03d}`, where `$datadir` is set in
-`src/process_epoch_functions.sh`
+`src/datadir`.
 
 To reprocess obsids in each epoch with current CalDB,
 ```
