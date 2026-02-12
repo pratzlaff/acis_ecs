@@ -48,6 +48,7 @@ def mkplot(args, data, ccd):
 
     ylim = {
         'Al':(1.40, 1.53),
+        'Ti':(4.41, 4.61),
         'Ml':(5.75, 5.95),
     }.get(args.line)
 
@@ -65,7 +66,12 @@ def mkplot(args, data, ccd):
             x = data['years'][mask] - xoffset[k]
             y = data['ediff'][j,k][mask]
             yerr = (data['lo'][j,k][mask], data['hi'][j,k][mask])
+
             ax[j].errorbar(x, y, yerr=yerr, fmt=fmt[k], ecolor=c[k], mec=c[k], mfc='none', ms=3, label=label)
+            if ((ccd=='i3' and j==3 and k==3) or (ccd=='s3' and j==0 and k==2)):
+                ax[j].errorbar(x, y, yerr=yerr, fmt='d', ecolor='black', mec='black', mfc='none', ms=6)
+
+    ax[1].set_xlabel('ECS epoch midpoint')
 
     global nom
     for i in range(0,4):
@@ -78,10 +84,12 @@ def mkplot(args, data, ccd):
     vmin= nom - vfact*nom; vmax= nom + vfact*nom
     vmin = {
         'Al':-40,
+        'Ti':-80,
         'Mn':-80,
     }.get(args.line)
     vmax = {
         'Al':40,
+        'Ti':80,
         'Mn':80,
     }.get(args.line)
 
@@ -104,6 +112,7 @@ def mkplot(args, data, ccd):
 
     ylim = {
         'Al':[-50,50],
+        'Ti':[-100,100],
         'Mn':[-100,100],
     }.get(args.line)
 
@@ -125,6 +134,7 @@ def plt_spec(args):
     global nom
     nom = {
         'Al':1.487,
+        'Ti':4.511,
         'Mn':5.895,
     }.get(args.line)
 
@@ -150,10 +160,11 @@ def plt_spec(args):
         for i, e in enumerate(args.epochs):
             inf=f'{datadir}/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
             try:
-                (xl,yl,al,al_lo,al_hi,mn,mn_lo,mn_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,19,20,21,-1])
+                (xl,yl,al,al_lo,al_hi,ti,ti_lo,ti_hi,mn,mn_lo,mn_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=[0,2,4,5,6,9,10,11,19,20,21,-1])
 
                 li, li_lo, li_hi = {
                     'Al':(al, al_lo, al_hi),
+                    'Ti':(ti, ti_lo, ti_hi),
                     'Mn':(mn, mn_lo, mn_hi),
                 }.get(args.line)
 
@@ -194,7 +205,7 @@ def main():
     )
     parser.add_argument('-p', '--pdf', help='Output PDF file.')
     parser.add_argument('temps', help='e.g., 120,119,118')
-    parser.add_argument('line', choices=['Al','Mn'])
+    parser.add_argument('line', choices=['Al','Ti','Mn'])
     parser.add_argument('epochs', type=int, nargs='+')
     parser.add_argument('--det', choices=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5'], nargs='+')
     args = parser.parse_args()
