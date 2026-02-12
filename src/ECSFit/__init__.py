@@ -1,0 +1,45 @@
+from collections import namedtuple
+
+from .Types import LineIgnores, XSlorentzPs, XSlorentzP, LineEP, WidthP, NormP
+
+Ignore = LineIgnores(al=[1.2, 2.0],
+                 mn=[5.2, 7.1],
+                 si=[None, None],
+                 ti=[4.0, 5.5],
+                 )
+
+'''Default parameter values for various lines.'''
+LineDefaults = XSlorentzPs(aulb=XSlorentzP(LineE=LineEP(11.442, -0.2, 0.1),
+                                           width=WidthP(0.05, 0.005, 0.1),
+                                           norm=NormP(2e-3)),
+                           aula=XSlorentzP(LineE=LineEP(9.713, -0.15, 0.1),
+                                           width=WidthP(0.01, 0.005, 0.1,),
+                                           norm=NormP(2e-3)),
+                           nika=XSlorentzP(LineE=LineEP(7.478, -0.15, 0.1),
+                                           width=WidthP(0.01, 0.005, 0.1,),
+                                           norm=NormP(8e-4)),
+                           nikb=XSlorentzP(LineE=LineEP(8.265, -0.15, 0.1),
+                                           width=WidthP(0.01, 0.005, 0.1,),
+                                           norm=NormP(4e-4)),
+                           auma=XSlorentzP(LineE=LineEP(2.120, -0.15, 0.07),
+                                           width=WidthP(0.01, 0.005, 0.1,),
+                                           norm=NormP(5e-4)),
+                           aumb=XSlorentzP(LineE=LineEP(2.205, None, None),
+                                           width=WidthP(0.01, 0.005, 0.1,),
+                                           norm=NormP(2e-4)),
+                           sika=XSlorentzP(LineE=LineEP(1.740, None, None),
+                                           width=WidthP(0.001, None, None),
+                                           norm=NormP(9e-3)),
+                           sikb=XSlorentzP(LineE=LineEP(1.836, None, None),
+                                           width=WidthP(0.001, None, None),
+                                           norm=NormP(3e-3)),
+                           alka=XSlorentzP(LineE=LineEP(1.4865, -0.1, 0.1),
+                                           width=WidthP(0.005, 0.001, 0.02),
+                                           norm=NormP(None)),
+                           tika1=XSlorentzP(LineE=LineEP(4.511, -0.075, 0.075),
+                                            width=WidthP(0.005, 0.001, 0.03),
+                                            norm=NormP(None)),
+                           mnka1=XSlorentzP(LineE=LineEP(5.8988, -0.075, 0.075),
+                                            width=WidthP(0.005, 0.001, 0.08),
+                                            norm=NormP(None)),
+                           )

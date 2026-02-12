@@ -1,6 +1,12 @@
 import argparse
+from collections import namedtuple
 import os
+import pprint
 import sys
+
+from ECSFit import LineDefaults, Ignore as ig
+from ECSFit.Types import NamedLines
+
 # if len(sys.argv) != 7: sys.exit('\nUsage: python *.py epoch ccd fp_temp[see script opts] yes/no[TG] binx biny\n\n')
 # (sname,e,ccd,fptv,tg,binx,biny)= sys.argv
 # e=f'{int(e):03d}'
@@ -59,10 +65,10 @@ numcores=16
 cnt_thresh=100    ## min counts in the .pi spectrum, otherwise skip    
 
 ## don't edit below here ##
-from astropy.time import Time as timetime
-from astropy.io.fits import open as astro_open
+import astropy.time
+import astropy.io.fits
 from glob import glob
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 import shutil
@@ -105,15 +111,62 @@ if False:
     if fptv==120: fpt_list=[120]      ## -120.19:-119.19
     if fptv==120118: fpt_list=[120,119,118]  ## -120.19:-117.19
 
-dgdir= '/usr/local/ciao/CALDB/data/chandra/acis/det_gain/'
+dgdir= os.environ['CALDB']+'/data/chandra/acis/det_gain/'
 dg_yesCTI= dgdir+'acisD2000-01-29gain_ctiN0008.fits'
 dg_noCTI= dgdir+'acisD2000-01-29gainN0005.fits'
 
-pdf = None
+def get_rmffile(ccd, tmin, xl, yl, binx, biny):
+    rmf_fpt = f'{tmin-1}-{tmin}' if tmin==120 else f'{tmin-2}-{tmin}'
+    rmf_dir= f'{datadir}/acis_response/rmf/pi_{binx}x{biny}y_{rmf_fpt}'
+    return f'{rmf_dir}/{ccd}_{xl:04d}-{xl+binx-1:04d}x_{yl:04d}-{yl+biny-1:04d}y.wrmf'
+
+
+def get_arffile(ccd, dyear, xl, yl, binx, biny):
+    arf_date= f'{dyear:.0f}-09-01' if dyear <= 2024 else '2024-09-01'
+    arf_dir= f'{datadir}/acis_response/arf/{arf_date}/{binx}x{biny}y/HRMA1'
+    return f'{arf_dir}/{ccd}_{xl:04d}-{xl+binx-1:04d}x_{yl:04d}-{yl+biny-1:04d}y.warf'
+
+def set_line(lstr, shift=0):
+    '''Sets parameters of a sherpa.ui.xslorentz instance named lstr,
+    with an optional shift from the default energy.'''
+
+    # these lines have energies linked to other lines
+    linked = { 'aumb', };
+
+    line = globals()[lstr]
+    ldef = getattr(LineDefaults, lstr)
+
+    globals()[lstr+'_nom'] = ldef.LineE.val
+
+    if (lstr not in linked):
+        line.LineE = ldef.LineE.val+shift
+        if ldef.LineE.minoff is not None:
+            line.LineE.min = ldef.LineE.val+shift+ldef.LineE.minoff
+        if ldef.LineE.maxoff is not None:
+            line.LineE.max = ldef.LineE.val+shift+ldef.LineE.maxoff
+    else:
+        '''Special cases for lines with linked energies'''
+        match lstr:
+            case 'aumb':
+                aumb.LineE= auma.LineE + ldef.LineE.val - LineDefaults.auma.LineE.val
+
+    line.width = ldef.width.val
+    if ldef.width.min is not None:
+        line.width.min = ldef.width.min
+    if ldef.width.max is not None:
+        line.width.max = ldef.width.max
+
+    if ldef.norm.val is not None:
+        line.norm = ldef.norm.val
 
 #################################################
 def do_fit(args):
-    global pdf
+
+    if args.pdf:
+        plt_dir= os.path.dirname(args.pdf)
+        if plt_dir and not os.path.exists(plt_dir):
+            os.makedirs(plt_dir, exist_ok=True)
+        pdf = PdfPages(args.pdf)
 
     ccd = args.ccd
     xbin = args.binx
@@ -145,129 +198,8 @@ def do_fit(args):
         sys.stderr.write(f'does not exist: {spec_dir}\n')
         sys.exit(1)
 
-    ############ plot block
-    def plt_me():
-        global pdf
-
-        lwarn(); ui.notice(); ui.group_snr(1,plt_grp)
-        fplot = ui.get_fit_plot()
-        dmx = fplot.dataplot.x
-        daty = fplot.dataplot.y; datye = fplot.dataplot.yerr
-        prat = ui.get_ratio_plot()
-        ## ungrouped model & component plot
-        ui.ungroup()
-
-        pmdl= ui.get_model_component_plot(bkg_mdl+src_mdl)
-        mdlx=(pmdl.xlo+pmdl.xhi)/2.; mdly= pmdl.y
-        pbkg= ui.get_model_component_plot(bkg_mdl)
-        xbkg=(pbkg.xlo+pbkg.xhi)/2.; ybkg= pbkg.y
-        yal= ui.get_model_component_plot(alka+alkb).y
-        ysi= ui.get_model_component_plot(sika+sikb).y
-        ytika= ui.get_model_component_plot(tika1+tika2).y
-        ytikb= ui.get_model_component_plot(tikb).y        
-        pmnka= ui.get_model_component_plot(mnka1+mnka2); xcomp= (pmnka.xlo+pmnka.xhi)/2.; ymnka= pmnka.y
-        ymnkb= ui.get_model_component_plot(mnkb).y
-        yaum= ui.get_model_component_plot(auma+aumb).y
-        ynik= ui.get_model_component_plot(nika+nikb).y
-        yaul= ui.get_model_component_plot(aula+aulb+aula_fs).y                
-        
-        yaxl= 0.25*min(mdly[np.where( (3<mdlx) & (mdlx<9) & (mdly>0) )])
-        yaxh=5*max(mdly)
-        xax=[1,14]; yax=[yaxl,yaxh]
-
-        f,ax= plt.subplots(2,1,sharex=1)
-
-        if args.pdf and pdf is None:
-            plt_dir= os.path.dirname(args.pdf)
-            if plt_dir and not os.path.exists(plt_dir):
-                os.makedirs(plt_dir)
-            pdf = PdfPages(args.pdf)
-        else:
-            f.canvas.manager.set_window_title(ccd.upper()+f': x= {sxl}-{sxh}, y= {syl}-{syh}')
-
-        my_lef=0.1; my_rt=0.95; my_bot=0.08; my_top=0.93; my_hs=0; my_ws=0.2
-        f.subplots_adjust(left=my_lef, right=my_rt, bottom=my_bot, top=my_top, hspace=my_hs, wspace=my_ws)
-        ## fit plot
-        lw1=1; lw2=0.5
-        ax[0].errorbar(dmx, daty, datye, fmt='+', ecolor='k', mec='k', ms=2, mew=0.5, elinewidth=0.5, zorder=0)
-        ax[0].plot(mdlx, mdly, '-', c='orange', lw=lw1,zorder=100)
-        ax[0].plot(xbkg, ybkg, '--', c='grey', lw=lw2)
-        ax[0].plot(xcomp, yal, '--', c='blue', lw=lw2)
-        ax[0].plot(xcomp, ysi, '--', c='grey', lw=lw2)
-        ax[0].plot(xcomp, ytika, '--', c='lime', lw=lw2)
-        ax[0].plot(xcomp, ytikb, '--', c='lime', lw=lw2)        
-        ax[0].plot(xcomp, ymnka, '--', c='red', lw=lw2)
-        ax[0].plot(xcomp, ymnkb, '--', c='red', lw=lw2)
-        ax[0].plot(xcomp, yaum, '--', c='cyan', lw=lw2)
-        ax[0].plot(xcomp, ynik, '--', c='green', lw=lw2)
-        ax[0].plot(xcomp, yaul, '--', c='magenta', lw=lw2)                        
-
-        ## plot narrow-window fit bounds
-        ax[0].hlines(0.9*yaxh,mn_iglo,mn_ighi,color='blue',lw=1)
-        ax[0].hlines(0.85*yaxh,ti_iglo,ti_ighi,color='blue',lw=1)
-        ax[0].hlines(0.9*yaxh,al_iglo,al_ighi,color='blue',lw=1)
-        ax[0].hlines(0.85*yaxh,si_iglo,si_ighi,color='blue',lw=1)
-
-        ## ratio plot
-        ax[1].step(prat.x, prat.y, '-', c='orange', lw=lw1,zorder=100, where='mid')
-        ax[1].axhline(1, c='black', lw=0.5, ls='--')
-
-        ## titles/axis/etc
-        ax[0].set_yscale('log'); ax[0].set_xscale('log')
-        ax[0].set_ylim(yax); ax[0].set_xlim(xax)
-        ax[0].set_xticks([1,2,3,4,5,6,8,10,12,14])
-        ax[0].get_xaxis().set_major_formatter(ScalarFormatter())
-        ax[1].set_yscale('linear'); ax[1].set_ylim([0.5,1.5])
-
-        ##
-        f.suptitle(f'{ccd.upper()}\t{e}\t{dyear:.3f}+'.expandtabs())
-        ax[0].text(0.02,0.94,f'x= {sxl}-{sxh} \ny= {syl}-{syh}', transform=ax[0].transAxes, va='top', ha='left')
-        ax[0].text(0.98,0.94,f'-{sfpt} $^\\circ$C \n{expo:.1f} ksec \nplot grouping SNR= {plt_grp}', transform=ax[0].transAxes, va='top', ha='right')
-        ax[0].set(ylabel='cnt/sec/keV')
-        ax[1].set(xlabel='keV', ylabel='data/model')
-        ##
-        ax[0].text(xax[1]*0.01,yaxl*1.2,r'$\Delta$ eV', va='bottom', ha='left',fontsize=10)
-
-        ##
-        line1= 1.1; line2= 1.7
-        ax[0].text(alka.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(alka.LineE.val-alka_nom),1e3*alka_ehi,1e3*alka_elo), va='bottom', ha='center',fontsize=8)
-        ax[0].text(sika.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(sika.LineE.val-sika_nom),1e3*sika_ehi,1e3*sika_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ax[0].text(sikb.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(sikb.LineE.val-sikb_nom),1e3*sikb_ehi,1e3*sikb_elo), va='bottom', ha='center',fontsize=8, c='grey') 
-        ##
-        ax[0].text(tika1.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(tika1.LineE.val-tika1_nom),1e3*tika1_ehi,1e3*tika1_elo), va='bottom', ha='center',fontsize=8)
-        ax[0].text(tikb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(tikb.LineE.val-tikb_nom),1e3*tikb_ehi,1e3*tikb_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ##
-        ax[0].text(mnka1.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(mnka1.LineE.val-mnka1_nom),1e3*mnka1_ehi,1e3*mnka1_elo), va='bottom', ha='center',fontsize=8)
-        ax[0].text(mnkb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(mnkb.LineE.val-mnkb_nom),1e3*mnkb_ehi,1e3*mnkb_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ##
-        ax[0].text(auma.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(auma.LineE.val-auma_nom),1e3*auma_ehi,1e3*auma_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ax[0].text(aumb.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(aumb.LineE.val-aumb_nom),1e3*aumb_ehi,1e3*aumb_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ##
-        ax[0].text(nika.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(nika.LineE.val-nika_nom),1e3*nika_ehi,1e3*nika_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ax[0].text(nikb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(nikb.LineE.val-nikb_nom),1e3*nikb_ehi,1e3*nikb_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ##
-        ax[0].text(aula.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(aula.LineE.val-aula_nom),1e3*aula_ehi,1e3*aula_elo), va='bottom', ha='center',fontsize=8, c='grey')
-        ax[0].text(aulb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
-                   format(1e3*(aulb.LineE.val-aulb_nom),1e3*aulb_ehi,1e3*aulb_elo), va='bottom', ha='center',fontsize=8, c='grey')
-            
-            
-        if args.pdf:
-            pdf.savefig(f)
-
-    ##########################################
     linfo()
+
     ## ccd_id
     ccd_id=int(ccd_list.index(ccd))
     if ccd=='s1_noCTI': ccd_id=5
@@ -276,24 +208,28 @@ def do_fit(args):
     ## open det_gain info
     dg= dg_yesCTI
     if ccd=='s1_noCTI' or ccd=='s3_noCTI': dg=dg_noCTI
-    hdulist = astro_open(dg)
-    dg_ccd= hdulist[1].data.field('ccd_id')
-    dg_xl= hdulist[1].data.field('chipx_min')
-    dg_yl= hdulist[1].data.field('chipy_min')
-    pha= hdulist[1].data.field('pha')
-    nrg= hdulist[1].data.field('energy')
+    with astropy.io.fits.open(dg) as hdulist:
+        dg_ccd= hdulist[1].data.field('ccd_id')
+        dg_xl= hdulist[1].data.field('chipx_min')
+        dg_yl= hdulist[1].data.field('chipy_min')
+        pha= hdulist[1].data.field('pha')
+        nrg= hdulist[1].data.field('energy')
 
     opentxt=0   ## reset for each ccd run
         
     ####################################################################
     for xl in range(xstart,1025,xbin):
         linfo()
-        xh= xl+xbin-1; sxl=str(xl).zfill(4); sxh=str(xh).zfill(4)
+        xh= xl+xbin-1
+        sxl = f'{xl:04d}'
+        sxh = f'{xh:04d}'
 
         sicol=0
         for yl in range(ystart,1025,ybin):
             linfo()
-            yh= yl+ybin-1; syl=str(yl).zfill(4); syh=str(yh).zfill(4)
+            yh= yl+ybin-1
+            syl = f'{yl:04d}'
+            syh = f'{yh:04d}'
 
             pif= f'{spec_dir}/{ccd}_{sxl}-{sxh}x_{syl}-{syh}y.pi'
             tot_cnts=0
@@ -301,8 +237,10 @@ def do_fit(args):
             if os.path.exists(pif):
 
                 ui.clean()
-                ui.set_method('neldermead'); ui.set_conf_opt('fast',True)
-                ui.set_conf_opt('numcores',numcores); ui.set_conf_opt('max_rstat',1e6)
+                ui.set_method('neldermead')
+                ui.set_conf_opt('fast',True)
+                ui.set_conf_opt('numcores',numcores)
+                ui.set_conf_opt('max_rstat',1e6)
                 ##ui.set_stat('cstat')  ## cstat too aggressive to include low count wings
 
                 ui.load_pha(pif)
@@ -310,21 +248,15 @@ def do_fit(args):
                 ## spec info
                 expo= 1e-3*ui.get_data().exposure
                 date= ui.get_data().header['DATE-OBS']
-                ##tt= time.Time(date); tt.format='decimalyear'; dyear= tt.value
-                tt= timetime(date); tt.format='decimalyear'; dyear= tt.value                
+                dyear = astropy.time.Time(date).to_value('decimalyear')
 
                 tmin = np.array([int(t) for t in tstr.split('-')]).max()
-                rmf_fpt = f'{tmin-1}-{tmin}' if tmin==120 else f'{tmin-2}-{tmin}'
-                rmf_dir= f'{datadir}/acis_response/rmf/pi_{xbin}x{ybin}y_{rmf_fpt}'
-                rmf,= glob(f'{rmf_dir}/{ccd}_{sxl}-*x_{syl}-*y.wrmf')
+                rmf = get_rmffile(ccd, tmin, xl, yl, args.binx, args.biny)
 
-                arf_date= '{}-09-01'.format(round(dyear))
-                if dyear>2024: arf_date='2024-09-01'
-                arf_dir= '/data/hal9000/acis_response/arf/{}/{}x{}y/HRMA1'.format(arf_date,xbin,ybin)
-                arf_dir= f'{datadir}/acis_response/arf/{arf_date}/{xbin}x{ybin}y/HRMA1'
-                arf,= glob('{}/{}_{}-*x_{}-*y.warf'.format(arf_dir, ccd, sxl, syl))
+                arf = get_arffile(ccd, dyear, xl, yl, args.binx, args.biny)
 
-                ui.load_rmf(rmf); ui.load_arf(arf)
+                ui.load_rmf(rmf)
+                ui.load_arf(arf)
 
                 lwarn()
                 ui.ignore('8.0:')
@@ -334,18 +266,24 @@ def do_fit(args):
                 lwarn() if verbose<2 else linfo()
 
             ## turn on/off fit blocks, debugging/low-counts/BI
-            fitbkginitlines=1; fitinit=1; fitmn=1; fitti=1; fital=1; fitsi=1; fitaum=1; fitnika=1; fitnikb=1; fitaula=1; fitaufs=1; fitaulb=1
-            if tot_cnts<800 or ccd=='s1' or ccd=='s1_noCTI' or ccd=='s3' or ccd=='s3_noCTI':
-                fitaum=0; fitnikb=0; fitaufs=0
+            fields = 'bkginitlines init mn ti al si aum nika nikb aula aufs aulb'.split(' ')
+            ToFit = namedtuple('ToFit', fields, defaults=(True,)*len(fields))
 
-            #fitbkginitlines=0; fitinit=0; fitmn=0; fitti=0; fital=0; fitsi=0; fitaum=0; fitnika=0; fitnikb=0; fitaula=0; fitaufs=0; fitaulb=0
+            if tot_cnts<800 or ccd=='s1' or ccd=='s1_noCTI' or ccd=='s3' or ccd=='s3_noCTI':
+                tofit = ToFit(aum=False, nikb=False, aufs=False)
+            else:
+                tofit = ToFit()
 
             if tot_cnts>cnt_thresh:
 
-                fit_grp=2; plt_grp=2
-                if tot_cnts<200: fit_grp=1
-                if tot_cnts>1000: plt_grp=3
-                if tot_cnts>4000: plt_grp=4
+                fit_grp=2
+                plt_grp=2
+                if tot_cnts<200:
+                    fit_grp=1
+                if tot_cnts>1000:
+                    plt_grp=3
+                if tot_cnts>4000:
+                    plt_grp=4
 
                 ## run conf errors switches
                 doerr=0  ## reset each run
@@ -400,8 +338,6 @@ def do_fit(args):
                     ax.set_yscale('log'); ax.set_xscale('log')
                     ax.set_xlim([4,9]); plt.show()
 
-
-
                 ##################                
                 ## inst bkg model
                 if dyear<=2005: byear=2000
@@ -417,43 +353,39 @@ def do_fit(args):
                 if yl>768: byl=769
                 ##
                 ui.copy_data(1,10) ## avoids issues
-                bgf,= glob(f'{datadir}/acis_bkg/s04_final_models_nolines/{bccd}_{byear}_{byl}-*y.dat')
+                bgf,= glob(f'{datadir}/acis_bkg/s04_final_models_nolines/{bccd}_{byear}_{byl}-{byl+ybin-1}y.dat')
+                bgf =f'{datadir}/acis_bkg/s04_final_models_nolines/{bccd}_{byear}_{byl}-{byl+ybin-1}y.dat'
+                #sys.stderr.write(bgf+'\n')
                 ui.load_table_model('bkg_arr',bgf)
                 unit_arf = ui.get_arf(10)
                 unit_arf.specresp = np.ones_like(unit_arf.specresp)
                 rsp_bkg = ui.get_response(10)
 
                 ## BKG lines
-                sika = ui.xslorentz.sika; sika_nom= 1.740
-                sika.LineE= sika_nom; sika.Width= 0.001
-                sika.norm= 9e-3
-                ## Si-Kb
-                sikb = ui.xslorentz.sikb; sikb_nom= 1.836
-                sikb.LineE= sikb_nom; sikb.Width= 0.001
-                sikb.norm= 3e-3
+                ui.xslorentz.sika;
+                set_line('sika')
+
+                ui.xslorentz.sikb;
+                set_line('sikb')
+
                 ##
-                ui.xslorentz.auma; auma_nom= 2.120
-                ui.set_par(auma.LineE, auma_nom, min= auma_nom-0.15, max= auma_nom+0.07)
-                ui.set_par(auma.width, 0.01, min=0.005, max=0.1)
-                auma.norm= 5e-4
-                ui.xslorentz.aumb; aumb_nom= 2.205
-                aumb.LineE= auma.LineE+ aumb_nom-auma_nom
-                ui.set_par(aumb.width, 0.01, min=0.005, max=0.1)
-                aumb.norm= 2e-4
+                ui.xslorentz.auma;
+                set_line('auma')
+
+                ui.xslorentz.aumb;
+                set_line('aumb')
+
                 ##
-                ui.xslorentz.nika; nika_nom= 7.478
-                val= nika_nom+ig_shift; ui.set_par(nika.LineE, val, min= val-0.15, max= val+0.1)
-                ui.set_par(nika.width, 0.01, min=0.005, max=0.1)
-                nika.norm= 8e-4
-                ui.xslorentz.nikb; nikb_nom= 8.265
-                val= nikb_nom+ig_shift; ui.set_par(nikb.LineE, val, min= val-0.15, max= val+0.1)
-                ui.set_par(nikb.width, 0.01, min=0.005, max=0.1)
-                nikb.norm= 4e-4
+                ui.xslorentz.nika;
+                set_line('nika', shift=ig_shift)
+
+                ui.xslorentz.nikb;
+                set_line('nikb', shift=ig_shift)
+
                 ##
-                ui.xslorentz.aula; aula_nom= 9.713
-                val= aula_nom+1.2*ig_shift; ui.set_par(aula.LineE, val, min= val-0.15, max= val+0.1)
-                ui.set_par(aula.width, 0.01, min=0.005, max=0.1)
-                aula.norm= 2e-3
+                ui.xslorentz.aula;
+                set_line('aula', shift=1.2*ig_shift)
+
                 ##
                 ui.xslorentz.aula_fs
                 if yl<=256: aula_fs_shif= 0.65
@@ -463,288 +395,440 @@ def do_fit(args):
                 aula_fs.LineE= aula_nom+ aula_fs_shif
                 ui.set_par(aula_fs.width, 0.05, min=0.005, max=0.1)
                 aula_fs.norm= aula.norm*0.3
-                ##
-                ui.xslorentz.aulb; aulb_nom= 11.442
-                val= aulb_nom+1.3*ig_shift; ui.set_par(aulb.LineE, val, min= val-0.2, max= val+0.1)
-                ui.set_par(aulb.width, 0.05, min=0.005, max=0.1)
-                aulb.norm= 2e-3
 
+                ##
+                ui.xslorentz.aulb;
+                set_line('aulb', shift=1.3*ig_shift)
 
                 bkg_mdl=rsp_bkg(bkg_arr+ sika+ sikb+ auma+ aumb+ nika +nikb +aula +aula_fs +aulb)
                 ## fit bkg scaling
                 ui.set_full_model(10, bkg_mdl)
 
                 ## Fit BKGND - above 8keV
-                iglo=8.0; ighi=12.5; ign=f':{iglo},{ighi}:'
-                lwarn(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                lwarn(); ui.freeze(bkg_mdl);
-                if fitbkginitlines: ui.thaw(bkg_arr)
-                if fitnikb: ui.thaw(nikb)
-                if fitaula: ui.thaw(aula)
-                if fitaufs: ui.thaw(aula_fs)
-                if fitaulb: ui.thaw(aulb)
+                iglo, ighi = 8.0, 12.5
+                ign=f':{iglo},{ighi}:'
+                lwarn()
+                ui.ungroup()
+                ui.ignore(ign)
+                ui.group_snr(fit_grp)
+                lwarn()
+                ui.freeze(bkg_mdl)
+
+                if tofit.bkginitlines:
+                    ui.thaw(bkg_arr)
+
+                if tofit.nikb:
+                    ui.thaw(nikb)
+
+                if tofit.aula:
+                    ui.thaw(aula)
+
+                if tofit.aufs:
+                    ui.thaw(aula_fs)
+
+                if tofit.aulb:
+                    ui.thaw(aulb)
+
                 ui.thaw(bkg_arr)
                 if tot_cnts<xcnt_thresh_min or tot_cnts>xcnt_thresh_max:
                     ui.freeze(auma.width, aumb.width, aula.width, aula_fs.width, aulb.width, nika.width, nikb.width)
                 lwarn() if verbose<2 else linfo()
                 ui.fit(10); lwarn(); ui.notice(); ui.ungroup(); ui.freeze(bkg_mdl)
 
-                mnmaxwid=0.08
-                timaxwid= min([0.030, mnmaxwid])
                 ##################                
                 # Al-Ka
-                alka = ui.xslorentz.alka; alka_nom= 1.4865
-                val= alka_nom+0.5*ig_shift; ui.set_par(alka.LineE, val, min= val-0.1, max= val+0.1)
-                ui.set_par(alka.Width, 0.005, min= 0.001, max= 0.02)
-                val= bscl*1.19*nscl; ui.set_par(alka.norm, val, min= 0.1*val, max= 10*val)
+                ui.xslorentz.alka;
+                set_line('alka', shift=0.5*ig_shift)
+                val= bscl*1.19*nscl
+                ui.set_par(alka.norm, val, min= 0.1*val, max= 10*val)
+
                 # Al-Kb
-                alkb = ui.xslorentz.alkb
-                alkb.LineE= alka.LineE+0.07095; alkb.Width= alka.Width; alkb.norm=  alka.norm*1e-2
+                ui.xslorentz.alkb
+                alkb.LineE= alka.LineE+0.07095
+                alkb.Width= alka.Width
+                alkb.norm=  alka.norm*1e-2
+
                 ## Si-Ka
-                sika.LineE= alka.LineE+sika_nom-alka_nom; sika.Width= 0.001
-                val= bscl*8e-3*nscl; ui.set_par(sika.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
+                sika.LineE= alka.LineE+sika_nom-alka_nom
+                sika.Width= 0.001
+                val= bscl*8e-3*nscl
+                ui.set_par(sika.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
+
                 ## Si-Kb
-                sikb.LineE= alka.LineE+sikb_nom-alka_nom; sikb.Width= 0.001
-                val= bscl*5e-3*nscl; ui.set_par(sikb.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
+                sikb.LineE= alka.LineE+sikb_nom-alka_nom
+                sikb.Width= 0.001
+                val= bscl*5e-3*nscl
+                ui.set_par(sikb.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
                 
                 ##################
                 # Ti-Ka1
-                tika1 = ui.xslorentz.tika1; tika1_nom= 4.511
-                val= tika1_nom+0.9*ig_shift; ui.set_par(tika1.LineE, val, min= val-0.075, max= val+0.075)
-                ui.set_par(tika1.Width, 0.005, min= 0.001, max= timaxwid)
-                val= bscl*0.71*nscl; ui.set_par(tika1.norm, val= val, min= 1e-20, max= 1e20)
-                # Ti-Ka2
+                ui.xslorentz.tika1
+                set_line('tika1', shift=0.9*ig_shift)
+                val= bscl*0.71*nscl
+                ui.set_par(tika1.norm, val= val, min= 1e-20, max= 1e20)
+
                 tika2 = ui.xslorentz.tika2
-                tika2.LineE= tika1.LineE-0.00598; tika2.Width= tika1.Width; tika2.norm=  tika1.norm*0.5
+                tika2.LineE= tika1.LineE-0.00598
+                tika2.Width= tika1.Width
+                tika2.norm=  tika1.norm*0.5
+
                 # Ti-Kb
-                tikb = ui.xslorentz.tikb; tikb_nom= 4.932
-                tikb.LineE= tika1.LineE+tikb_nom-tika1_nom; tikb.Width= tika1.Width; tikb.norm= tika1.norm*0.20
+                tikb = ui.xslorentz.tikb
+                tikb_nom= 4.932
+                tikb.LineE= tika1.LineE+tikb_nom-tika1_nom
+                tikb.Width= tika1.Width
+                tikb.norm= tika1.norm*0.20
 
                 ##################
                 # Mn-Ka1
-                mnka1 = ui.xslorentz.mnka1; mnka1_nom= 5.8988
-                val= mnka1_nom+ig_shift; ui.set_par(mnka1.LineE, val, min= val-0.075, max= val+0.075)
-                val=0.005; ui.set_par(mnka1.Width, val, min= 0.001, max= mnmaxwid)
-                val= bscl*2.5*nscl; ui.set_par(mnka1.norm, val= val, min= 1e-20, max= 1e20)
+                ui.xslorentz.mnka1
+                set_line('mnka1', shift=ig_shift)
+                val= bscl*2.5*nscl
+                ui.set_par(mnka1.norm, val= val, min= 1e-20, max= 1e20)
+
                 # Mn-Ka2
-                mnka2 = ui.xslorentz.mnka2; mnka2_nom= 5.8877
-                mnka2.LineE= mnka1.LineE+mnka2_nom-mnka1_nom; mnka2.Width= mnka1.Width; mnka2.norm= mnka1.norm*0.5
+                mnka2 = ui.xslorentz.mnka2
+                mnka2_nom= 5.8877
+                mnka2.LineE= mnka1.LineE+mnka2_nom-mnka1_nom
+                mnka2.Width= mnka1.Width
+                mnka2.norm= mnka1.norm*0.5
+
                 # Mn-Kb
-                mnkb = ui.xslorentz.mnkb; mnkb_nom= 6.490
-                mnkb.LineE= mnka1.LineE+mnkb_nom-mnka1_nom; mnkb.Width= mnka1.Width; mnkb.norm= mnka1.norm*0.23
+                mnkb = ui.xslorentz.mnkb
+                mnkb_nom= 6.490
+                mnkb.LineE= mnka1.LineE+mnkb_nom-mnka1_nom
+                mnkb.Width= mnka1.Width
+                mnkb.norm= mnka1.norm*0.23
                 
                 rsp= ui.get_response(1)
                 src_mdl= rsp(alka+alkb + tika1+tika2+tikb + mnka1+mnka2+mnkb)
-                ui.set_full_model(1, bkg_mdl + src_mdl); ui.freeze(src_mdl,bkg_mdl)
-
-                
+                ui.set_full_model(1, bkg_mdl + src_mdl)
+                ui.freeze(src_mdl,bkg_mdl)
 
                 #################                
-                if fitinit:
+                if tofit.init:
                     ## initial rough fit
-                    iglo=1.1; ighi=8.5; ign=':{},{}:'.format(iglo,ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                    ui.thaw(src_mdl); ui.thaw(sika, sikb, auma, aumb, nika); ui.freeze(sika.width, sikb.width, auma.width, aumb.width, nika.width)
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    iglo, ighi = 1.1, 8.5
+                    ui.ignore(f':{iglo},{ighi}:')
+                    ui.group_snr(fit_grp)
+                    ui.thaw(src_mdl)
+                    ui.thaw(sika, sikb, auma, aumb, nika)
+                    ui.freeze(sika.width, sikb.width, auma.width, aumb.width, nika.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.freeze(src_mdl,bkg_mdl)
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    ui.freeze(src_mdl,bkg_mdl)
 
                 #################
-                if fitmn:
+                if tofit.mn:
                     ##----------
                     ## untie Mn-Kb from Ka
                     val= mnka1.LineE.val+mnkb_nom-mnka1_nom
                     ui.set_par(mnkb.LineE, val, min= val-0.02, max= val+0.02)
-                    val= mnka1.width.val; ui.set_par(mnkb.Width, val, min= 0.001, max= val+0.005)
-                    val= mnka1.norm.val*0.21; ui.set_par(mnkb.norm, val, min=0.15*mnka1.norm.val, max=0.25*mnka1.norm.val)
+                    val= mnka1.width.val
+                    ui.set_par(mnkb.Width, val, min= 0.001, max= val+0.005)
+                    val= mnka1.norm.val*0.21
+                    ui.set_par(mnkb.norm, val, min=0.15*mnka1.norm.val, max=0.25*mnka1.norm.val)
 
-                    
-                    mn_iglo=5.2; mn_ighi=7.1; ign=':{},{}:'.format(mn_iglo,mn_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnka1, mnka2, mnkb)
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    ui.ignore(f':{ig.mn[0]},{ig.mn[1]}:')
+                    ui.group_snr(fit_grp)
+                    ui.freeze(src_mdl,bkg_mdl)
+                    ui.thaw(mnka1, mnka2, mnkb)
                     lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
+                    ui.fit(1)
+                    lwarn()
 
                     ## Mna errors
                     if doerr==1:
-                        ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnka1, mnka2)
+                        ui.freeze(src_mdl,bkg_mdl)
+                        ui.thaw(mnka1, mnka2)
                         try:
                             ui.set_method('levmar')
-                            iglo=mnka1.LineE.val-0.8; ighi=mnka1.LineE.val+1.2; ign=':{},{}:'.format(iglo,ighi)
-                            lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat; errl=None; errh=None
+                            lwarn()
+                            ui.notice()
+                            ui.ungroup()
+                            iglo=mnka1.LineE.val-0.8
+                            ighi=mnka1.LineE.val+1.2
+                            ui.ignore(f':{iglo},{ighi}:')
+                            ui.group_snr(fit_grp)
+                            rstat= ui.get_fit_results().rstat
+                            errl, errh = None, None
                             lerror() if verbose<2 else linfo()
                             if rstat < 5:
-                                if test: print('\nLineE CONF...')
-                                ui.conf(mnka1.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
+                                if test:
+                                    print('\nLineE CONF...')
+                                ui.conf(mnka1.LineE)
+                                tmp=ui.get_conf_results()
+                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
+
                             if rstat >= 5 or errl is None:
-                                if test: print('\nLineE COVAR...')
-                                ui.covar(mnka1.LineE); errl=ui.get_covar_results().parmaxes[0]
+                                if test:
+                                    print('\nLineE COVAR...')
+                                ui.covar(mnka1.LineE)
+                                errl=ui.get_covar_results().parmaxes[0]
                                 if errl is not None:
-                                    errl=-errl; errh=-errl
-                            if errl is None: errl=-0.099
-                            if errh is None: errh=-errl
+                                    errl, errh = -errl, errl
+                            if errl is None:
+                                errl=-0.099
+                            if errh is None:
+                                errh=-errl
                             if errl > -0.001: errl=-0.001
                             if errh < 0.001: errh=0.001
                         except:
-                            ui.set_method('neldermead'); errl=-0.099; errh=0.099
+                            ui.set_method('neldermead')
+                            errl, errh = -0.099, 0.099
                     else:
-                        errl=-0.099; errh=0.099
-                    if errh==0.099: doerr=0  ## turn off err if Mn is bad
-                    mnka1_elo= errl; mnka1_ehi=errh                    
+                        errl, errh = -0.099, 0.099
+                    if errh==0.099:
+                        doerr=0  ## turn off err if Mn is bad
+                    mnka1_elo, mnka1_ehi = errl, errh
 
                     ## Mnb errors
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(mnkb)
+                    ui.freeze(src_mdl,bkg_mdl)
+                    ui.thaw(mnkb)
                     lwarn()
                     ## Mnb errors
                     if doerr==1:
                         try:
                             ui.set_method('levmar')
-                            iglo=mnkb.LineE.val-1.2; ighi=mnkb.LineE.val+0.5; ign=':{},{}:'.format(iglo,ighi)
-                            lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat; errl=None; errh=None
+                            lwarn()
+                            ui.notice()
+                            ui.ungroup()
+                            iglo=mnkb.LineE.val-1.2;
+                            ighi=mnkb.LineE.val+0.5;
+                            ui.ignore(f':{iglo},{ighi}:')
+                            ui.group_snr(fit_grp)
+                            rstat= ui.get_fit_results().rstat
+                            errl, errh = None, None
                             lerror() if verbose<2 else linfo()
                             if rstat < 5:
-                                if test: print('\nLineE CONF...')
-                                ui.conf(mnkb.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
+                                if test:
+                                    print('\nLineE CONF...')
+                                ui.conf(mnkb.LineE)
+                                tmp=ui.get_conf_results()
+                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
                             if rstat >= 5 or errl is None:
-                                if test: print('\nLineE COVAR...')
-                                ui.covar(mnkb.LineE); errl=ui.get_covar_results().parmaxes[0]
+                                if test:
+                                    print('\nLineE COVAR...')
+                                ui.covar(mnkb.LineE)
+                                errl=ui.get_covar_results().parmaxes[0]
                                 if errl is not None:
-                                    errl=-errl; errh=-errl
-                            if errl is None: errl=-0.099
-                            if errh is None: errh=-errl
-                            if errl > -0.001: errl=-0.001
-                            if errh < 0.001: errh=0.001
+                                    errl, errh = -errl, errl
+                            if errl is None:
+                                errl=-0.099
+                            if errh is None:
+                                errh=-errl
+                            if errl > -0.001:
+                                errl=-0.001
+                            if errh < 0.001:
+                                errh=0.001
                         except:
-                            ui.set_method('neldermead'); errl=-0.099; errh=0.099
+                            ui.set_method('neldermead')
+                            errl, errh = -0.099, 0.099
                     else:
-                        errl=-0.099; errh=0.099
-                    mnkb_elo= errl; mnkb_ehi=errh
-                    lwarn(); ui.notice(); ui.ungroup(); ui.freeze(src_mdl,bkg_mdl)
+                        errl, errh = -0.099, 0.099
+                    mnkb_elo, mnkb_ehi = errl, errh
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    ui.freeze(src_mdl,bkg_mdl)
                 else:
-                    mnka1_elo= -0.099; mnka1_ehi=0.099; mnkb_elo= -0.099; mnkb_ehi=0.099                    
-
-
-                
+                    mnka1_elo, mnka1_ehi = -0.099, 0.099
+                    mnkb_elo, mnkb_ehi = -0.099, 0.099
 
                 #################
-                if fitti:
+                if tofit.ti:
 
                     ## untie Kb from Ka
                     val= tika1.LineE.val+tikb_nom-tika1_nom
                     ui.set_par(tikb.LineE, val, min= val-0.02, max= val+0.02)
-                    val= tika1.Width.val; ui.set_par(tikb.Width, val, min= 0.001, max= val+0.005)
-                    val= 0.201*tika1.norm.val; ui.set_par(tikb.norm, val, min=0.15*tika1.norm.val, max=0.30*tika1.norm.val)
+                    val= tika1.Width.val
+                    ui.set_par(tikb.Width, val, min= 0.001, max= val+0.005)
+                    val= 0.201*tika1.norm.val
+                    ui.set_par(tikb.norm, val, min=0.15*tika1.norm.val, max=0.30*tika1.norm.val)
 
-                    ti_iglo=4.0; ti_ighi=5.5; ign=':{},{}:'.format(ti_iglo,ti_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(tika1, tika2, tikb)
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    ui.ignore(f':{ig.ti[0]},{ig.ti[1]}:')
+                    ui.group_snr(fit_grp)
+                    ui.freeze(src_mdl,bkg_mdl)
+                    ui.thaw(tika1, tika2, tikb)
                     lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
+                    ui.fit(1)
+                    lwarn()
                     
                     ## Tia errors
                     if doerr==1:
                         try:
                             ui.set_method('levmar')
-                            iglo=tika1.LineE.val-0.4; ighi=tika1.LineE.val+0.4; ign=':{},{}:'.format(iglo,ighi)
-                            lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat; errl=None; errh=None
+                            lwarn()
+                            ui.notice()
+                            ui.ungroup()
+                            iglo=tika1.LineE.val-0.4
+                            ighi=tika1.LineE.val+0.4
+                            ui.ignore(f':{iglo},{ighi}:')
+                            ui.group_snr(fit_grp)
+                            rstat= ui.get_fit_results().rstat
+                            errl, errh = None, None
                             lerror() if verbose<2 else linfo()
                             if rstat < 5:
-                                if test: print('\nLineE CONF...')
-                                ui.conf(tika1.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
+                                if test:
+                                    print('\nLineE CONF...')
+                                ui.conf(tika1.LineE);
+                                tmp=ui.get_conf_results();
+                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
                             if rstat >= 5 or errl is None:
-                                if test: print('\nLineE COVAR...')
-                                ui.covar(tika1.LineE); errl=ui.get_covar_results().parmaxes[0]
+                                if test:
+                                    print('\nLineE COVAR...')
+                                ui.covar(tika1.LineE)
+                                errl=ui.get_covar_results().parmaxes[0]
                                 if errl is not None:
-                                    errl=-errl; errh=-errl
-                            if errl is None: errl=-0.099
-                            if errh is None: errh=-errl
-                            if errl > -0.001: errl=-0.001
-                            if errh < 0.001: errh=0.001
+                                    errl, errh = -errl, errl
+                            if errl is None:
+                                errl=-0.099
+                            if errh is None:
+                                errh=-errl
+                            if errl > -0.001:
+                                errl=-0.001
+                            if errh < 0.001:
+                                errh=0.001
                         except:
-                            ui.set_method('neldermead'); errl=-0.099; errh=0.099
+                            ui.set_method('neldermead')
+                            errl, errh =-0.099, 0.099
                     else:
-                        errl=-0.099; errh=0.099
-                    tika1_elo= errl; tika1_ehi=errh                    
+                        errl, errh = -0.099, 0.099
+                    tika1_elo, tika1_ehi = errl, errh
                                     
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(tikb); ui.freeze(tikb.width)
+                    ui.freeze(src_mdl,bkg_mdl)
+                    ui.thaw(tikb)
+                    ui.freeze(tikb.width)
+
                     ## Tib errors
                     if doerr==1:
                         try:
                             ui.set_method('levmar')
-                            iglo=tikb.LineE.val-0.4; ighi=tikb.LineE.val+0.4; ign=':{},{}:'.format(iglo,ighi)
-                            lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat; errl=None; errh=None
+                            lwarn()
+                            ui.notice()
+                            ui.ungroup()
+                            iglo=tikb.LineE.val-0.4
+                            ighi=tikb.LineE.val+0.4
+                            ui.ignore(f':{iglo},{ighi}:')
+                            ui.group_snr(fit_grp)
+                            rstat= ui.get_fit_results().rstat
+                            errl, errh = None, None
                             lerror() if verbose<2 else linfo()
                             if rstat < 5:
-                                if test: print('\nLineE CONF...')
-                                ui.conf(tikb.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
+                                if test:
+                                    print('\nLineE CONF...')
+                                ui.conf(tikb.LineE)
+                                tmp=ui.get_conf_results()
+                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
                             if rstat >= 5 or errl is None:
-                                if test: print('\nLineE COVAR...')
-                                ui.covar(tikb.LineE); errl=ui.get_covar_results().parmaxes[0]
+                                if test:
+                                    print('\nLineE COVAR...')
+                                ui.covar(tikb.LineE)
+                                errl=ui.get_covar_results().parmaxes[0]
                                 if errl is not None:
-                                    errl=-errl; errh=-errl
-                            if errl is None: errl=-0.099
-                            if errh is None: errh=-errl
-                            if errl > -0.001: errl=-0.001
-                            if errh < 0.001: errh=0.001
+                                    errl, errh = -errl, errl
+                            if errl is None:
+                                errl=-0.099
+                            if errh is None:
+                                errh=-errl
+                            if errl > -0.001:
+                                errl=-0.001
+                            if errh < 0.001:
+                                errh=0.001
                         except:
-                            ui.set_method('neldermead'); errl=-0.099; errh=0.099
+                            ui.set_method('neldermead')
+                            errl, errh = -0.099, 0.099
                     else:
-                        errl=-0.099; errh=0.099
-                    tikb_elo= errl; tikb_ehi=errh
-                    lwarn(); ui.notice(); ui.ungroup(); ui.freeze(src_mdl,bkg_mdl)
+                        errl, errh = -0.099, 0.099
+                    tikb_elo, tikb_ehi = errl, errh
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    ui.freeze(src_mdl,bkg_mdl)
                 else:
-                    tika1_elo= -0.099; tika1_ehi=0.099; tikb_elo= -0.099; tikb_ehi=0.099
-
+                    tika1_elo, tika1_ehi = -0.099, 0.099
+                    tikb_elo, tikb_ehi = -0.099, 0.099
 
                 
                 #################
-                if fital:
+                if tofit.al:
                     ##----------
                     ## untie Si from Al
                     sika.LineE= alka.LineE.val +sika_nom-alka_nom; sika.Width= alka.width.val; sika.norm= sika.norm.val
                     sikb.LineE= alka.LineE.val +sikb_nom-alka_nom; sikb.Width= alka.width.val; sikb.norm= sikb.norm.val                    
                     ## Al-only tight window fwhm
-                    al_iglo= 1.2; al_ighi=2.0; ign=':{},{}:'.format(al_iglo,al_ighi)
-
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(alka, alkb); ui.freeze(alka.width)
+                    al_iglo= 1.2
+                    al_ighi=2.0
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    ui.ignore(f':{ig.al[0]},{ig.al[1]}:')
+                    ui.group_snr(fit_grp)
+                    ui.freeze(src_mdl,bkg_mdl)
+                    ui.thaw(alka, alkb)
+                    ui.freeze(alka.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
                     ## Al errors
                     if doerr==1:
                         try:
                             ui.set_method('levmar')
-                            iglo=alka.LineE.val-0.4; ighi=alka.LineE.val+0.4; ign=':{},{}:'.format(iglo,ighi)
-                            lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat; errl=None; errh=None
+                            iglo=alka.LineE.val-0.4
+                            ighi=alka.LineE.val+0.4
+                            ign=':{},{}:'.format(iglo,ighi)
+                            lwarn()
+                            ui.notice()
+                            ui.ungroup()
+                            ui.ignore(ign)
+                            ui.group_snr(fit_grp)
+                            rstat= ui.get_fit_results().rstat
+                            errl, errh = None, None
                             lerror() if verbose<2 else linfo()
                             if rstat < 5:
-                                if test: print('\nLineE CONF...')
-                                ui.conf(alka.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
+                                if test:
+                                    print('\nLineE CONF...')
+                                ui.conf(alka.LineE)
+                                tmp=ui.get_conf_results()
+                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
                             if rstat >= 5 or errl is None:
-                                if test: print('\nLineE COVAR...')
-                                ui.covar(alka.LineE); errl=ui.get_covar_results().parmaxes[0]
+                                if test:
+                                    print('\nLineE COVAR...')
+                                ui.covar(alka.LineE)
+                                errl=ui.get_covar_results().parmaxes[0]
                                 if errl is not None:
-                                    errl=-errl; errh=-errl
-                            if errl is None: errl=-0.099
-                            if errh is None: errh=-errl
-                            if errl > -0.001: errl=-0.001
-                            if errh < 0.001: errh=0.001
+                                    errl, errh =-errl, errl
+                            if errl is None:
+                                errl=-0.099
+                            if errh is None:
+                                errh=-errl
+                            if errl > -0.001:
+                                errl=-0.001
+                            if errh < 0.001:
+                                errh=0.001
                         except:
-                            ui.set_method('neldermead'); errl=-0.099; errh=0.099
+                            ui.set_method('neldermead')
+                            errl, errh = -0.099, 0.099
                     else:
-                        errl=-0.099; errh=0.099
-                    alka_elo= errl; alka_ehi=errh
+                        errl, errh = -0.099, 0.099
+                    alka_elo, alka_ehi = errl, errh
                 else:
-                    alka_elo= -0.099; alka_ehi=0.099
+                    alka_elo, alka_ehi = -0.099, 0.099
 
                     
                 ## SiK fits                    
-                if fitsi:
+                if tofit.si:
                     val= alka.LineE.val +sika_nom-alka_nom; ui.set_par(sika.LineE, val, min= val-0.04, max= val+0.04)
                     if sika.norm.val>1e-5*alka.norm.val: sika.norm.val= 2e-5*alka.norm.val
                     val= sika.norm.val; ui.set_par(sika.norm, val, min=1e-5*alka.norm.val, max=0.5*alka.norm.val)
@@ -754,6 +838,8 @@ def do_fit(args):
                     val= sikb.norm.val; ui.set_par(sikb.norm, val, min=1e-5*alka.norm.val, max=0.5*alka.norm.val)
                     
                     si_iglo= sika.LineE.val-0.2; si_ighi=sika.LineE.val+0.2; ign=':{},{}:'.format(si_iglo,si_ighi)
+                    ig.si[0] = sika.LineE.val-0.2
+                    ig.si[1] = sika.LineE.val+0.2
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sika); ui.freeze(sika.width)
                     lwarn() if verbose<2 else linfo()
@@ -783,6 +869,8 @@ def do_fit(args):
                     sika_elo= errl; sika_ehi=errh
 
                     si_iglo= sikb.LineE.val-0.2; si_ighi=sikb.LineE.val+0.2; ign=':{},{}:'.format(si_iglo,si_ighi)
+                    ig.si[0] = sikb.LineE.val-0.2
+                    ig.si[1] = sikb.LineE.val+0.2
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sikb); ui.freeze(sikb.width)
                     lwarn() if verbose<2 else linfo()
@@ -814,10 +902,8 @@ def do_fit(args):
                 else:
                     sika_elo= -0.099; sika_ehi=0.099; sikb_elo= -0.099; sikb_ehi=0.099
                     
-
-
                 #################
-                if fitaum and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                if tofit.aum and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
                     ##----------
                     ##untie Au-Mb
                     aumb.LineE= aumb.LineE.val
@@ -885,7 +971,7 @@ def do_fit(args):
 
                     
                 #################
-                if fitnika:
+                if tofit.nika:
                     ##----------
                     ## Ni-Ka +- fwhm
                     ni_iglo= nika.LineE.val-0.2; ni_ighi= nika.LineE.val+0.2; ign=':{},{}:'.format(ni_iglo,ni_ighi)
@@ -918,7 +1004,7 @@ def do_fit(args):
                     nika_elo= -0.099; nika_ehi=0.099
 
                 ## Ni-Kb +- fwhm                    
-                if fitnikb:
+                if tofit.nikb:
                     ni_iglo= nikb.LineE.val-0.2; ni_ighi= nikb.LineE.val+0.2; ign=':{},{}:'.format(ni_iglo,ni_ighi)
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(nikb); ui.freeze(nikb.width)
@@ -952,7 +1038,7 @@ def do_fit(args):
 
 
                 #################                    
-                if fitaula:
+                if tofit.aula:
                     ## Au-La +- fwhm
                     aula_iglo= aula.LineE.val-0.2; aula_ighi= aula.LineE.val+0.2; ign=':{},{}:'.format(aula_iglo,aula_ighi)
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
@@ -984,7 +1070,7 @@ def do_fit(args):
                     aula_elo= -0.099; aula_ehi=0.099
 
                     
-                if fitaufs:
+                if tofit.aufs:
                     ## Au-La-FrameStore +- fwhm
                     val= aula_nom+ aula_fs_shif; ui.set_par(aula_fs.LineE, val, min= val-0.2, max= val+0.2)
                     val= aula_fs.norm.val; ui.set_par(aula_fs.norm, val, min= aula.norm.val*0.01, max= aula.norm.val)
@@ -1020,7 +1106,7 @@ def do_fit(args):
 
 
                 ## Au-Lb+Lb +- fwhm                    
-                if fitaulb:    
+                if tofit.aulb:
                     aulb_iglo= aulb.LineE.val-0.3; aulb_ighi= aulb.LineE.val+0.3; ign=':{},{}:'.format(aulb_iglo,aulb_ighi)
                     lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aulb); ui.freeze(aulb.width)
@@ -1054,38 +1140,113 @@ def do_fit(args):
 
                     
                 #################
-                plt_me()
+                #plt_me()
+                lines = NamedLines(alka=alka,
+                                 sika=sika,
+                                 sikb=sikb,
+                                 tika1=tika1,
+                                 tikb=tikb,
+                                 mnka1=mnka1,
+                                 mnkb=mnkb,
+                                 nika=nika,
+                                 nikb=nikb,
+                                 aula=aula,
+                                 aulb=aulb,
+                                 auma=auma,
+                                 aumb=aumb,
+                                 )
+                nom = NamedLines(alka=alka_nom,
+                                 sika=sika_nom,
+                                 sikb=sikb_nom,
+                                 tika1=tika1_nom,
+                                 tikb=tikb_nom,
+                                 mnka1=mnka1_nom,
+                                 mnkb=mnkb_nom,
+                                 nika=nika_nom,
+                                 nikb=nikb_nom,
+                                 aula=aula_nom,
+                                 aulb=aulb_nom,
+                                 auma=auma_nom,
+                                 aumb=aumb_nom,
+                                 )
+                elo = NamedLines(alka=alka_elo,
+                                 sika=sika_elo,
+                                 sikb=sikb_elo,
+                                 tika1=tika1_elo,
+                                 tikb=tikb_elo,
+                                 mnka1=mnka1_elo,
+                                 mnkb=mnkb_elo,
+                                 nika=nika_elo,
+                                 nikb=nikb_elo,
+                                 aula=aula_elo,
+                                 aulb=aulb_elo,
+                                 auma=auma_elo,
+                                 aumb=aumb_elo,
+                                 )
+                ehi = NamedLines(alka=alka_ehi,
+                                 sika=sika_ehi,
+                                 sikb=sikb_ehi,
+                                 tika1=tika1_ehi,
+                                 tikb=tikb_ehi,
+                                 mnka1=mnka1_ehi,
+                                 mnkb=mnkb_ehi,
+                                 nika=nika_ehi,
+                                 nikb=nikb_ehi,
+                                 aula=aula_ehi,
+                                 aulb=aulb_ehi,
+                                 auma=auma_ehi,
+                                 aumb=aumb_ehi,
+                                 )
+                fit_args = (lines, nom, elo, ehi, bkg_mdl, src_mdl, plt_grp, xl, yl, args, )
+                fig = plot_fit(*fit_args)
+                if args.pdf:
+                    pdf.savefig(fig)
                 
             ########
             ## Record fitpars
             if recpars==1:
 
                 if opentxt==0:
-                    ## open output fitpars txt
-                    oufecs= f'{fit_dir}/{ccd}_ecs.txt'; fh_ecs= open(oufecs,'w')
-                    oufbkg= f'{fit_dir}/{ccd}_bkg.txt'; fh_bkg= open(oufbkg,'w')
-                    oufpha= f'{fit_dir}/{ccd}_pha.txt'; fh_pha= open(oufpha,'w')
-                    
+
+                    Named3 = namedtuple('Named3', 'ecs bkg pha')
+
+                    fnames = Named3(ecs=f'{fit_dir}/{ccd}_ecs.txt',
+                                    bkg=f'{fit_dir}/{ccd}_bkg.txt',
+                                    pha=f'{fit_dir}/{ccd}_pha.txt')
+
+                    # ## open output fitpars txt
+                    fhs = Named3(ecs=open(fnames.ecs, 'w'),
+                                 bkg=open(fnames.bkg, 'w'),
+                                 pha=open(fnames.pha, 'w'))
+
                     fmt_lines= '\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.1e}'
                     fmt_ecs='{}\t{}\t{}\t{}' + 5*fmt_lines + '\t{:f}\n'
                     fmt_bkg= '{}\t{}\t{}\t{}' + '\t{:.3f}' + 8*fmt_lines + '\n'
                     fmt_pha= '{}\t{}\t{}\t{}' + 12*'\t{:.1f}' + '\t{:.0f}\n'
-                    
+
+                    fmts = Named3(ecs='{}\t{}\t{}\t{}' + 5*fmt_lines + '\t{:f}\n',
+                                 bkg='{}\t{}\t{}\t{}' + '\t{:.3f}' + 8*fmt_lines + '\n',
+                                 pha='{}\t{}\t{}\t{}' + 12*'\t{:.1f}' + '\t{:.0f}\n')
+
                     if not tot_cnts>cnt_thresh:
                         dyear=9999.9; expo=9999
-                        
-                    fh_ecs.write('#### epoch e{}\tstart= {:.3f}\tksec= {:.1f}\n'.format(e,dyear,expo))
-                    fh_bkg.write('#### epoch e{}\tstart= {:.3f}\tksec= {:.1f}\n'.format(e,dyear,expo))
-                    fh_pha.write('#### epoch e{}\tstart= {:.3f}\tksec= {:.1f}\n'.format(e,dyear,expo))                    
+
+                    for fh in fhs:
+                        fh.write(f'#### epoch e{e}\tstart= {dyear:.3f}\tksec= {expo:.1f}\n')
                     
-                    fh_ecs.write('xl\txh\tyl\tyh\tAl_E\tAl_l\tAl_h\tAl_W\tAl_N\tTia_E\tTia_l\tTia_h\tTia_W\tTia_N\tTib_E\tTib_l\tTib_h\tTib_W\tTib_N\tMna_E\tMna_l\tMna_h\tMna_W\tMna_N\tMnb_E\tMnb_l\tMnb_h\tMnb_W\tMnb_N\tstat\n')
-                    fh_ecs.flush()
-                    fh_bkg.write('xl\txh\tyl\tyh\tamp\tSiKa_E\tSiKa_l\tSiKa_h\tSiKa_W\tSiKa_N\tAuMa_E\tAuMa_l\tAuMa_h\tAuMa_W\tAuMa_N\tAuMb_E\tAuMb_l\tAuMb_h\tAuMb_W\tAuMb_N\tNiKa_E\tNiKa_l\tNiKa_h\tNiKa_W\tNiKa_N\tNiKb_E\tNiKb_l\tNiKb_h\tNiKb_W\tNiKb_N\tAuLa_E\tAuLa_l\tAuLa_h\tAuLa_W\tAuLa_N\tAuFS_E\tAuFS_l\tAuFS_h\tAuFS_W\tAuFS_N\tAuLb_E\tAuLb_l\tAuLb_h\tAuLb_W\tAuLb_N\n')
-                    fh_bkg.flush()
-                    fh_pha.write('xl\txh\tyl\tyh\tAlKa\tSiKa\tAuMa\tAuMb\tTiKa1\tTiKb\tMnKa1\tMnKb\tNiKa\tAuLa\tAuFS\tAuLb\ttot_cnts\n')
+                    ecs_cols = 'xl xh yl yh Al_E Al_l Al_h Al_W Al_N Tia_E Tia_l Tia_h Tia_W Tia_N Tib_E Tib_l Tib_h Tib_W Tib_N Mna_E Mna_l Mna_h Mna_W Mna_N Mnb_E Mnb_l Mnb_h Mnb_W Mnb_N stat'.split(' ');
+                    bkg_cols = 'xl xh yl yh amp SiKa_E SiKa_l SiKa_h SiKa_W SiKa_N AuMa_E AuMa_l AuMa_h AuMa_W AuMa_N AuMb_E AuMb_l AuMb_h AuMb_W AuMb_N NiKa_E NiKa_l NiKa_h NiKa_W NiKa_N NiKb_E NiKb_l NiKb_h NiKb_W NiKb_N AuLa_E AuLa_l AuLa_h AuLa_W AuLa_N AuFS_E AuFS_l AuFS_h AuFS_W AuFS_N AuLb_E AuLb_l AuLb_h AuLb_W AuLb_N'.split(' ')
+                    pha_cols = 'xl xh yl yh AlKa SiKa AuMa AuMb TiKa1 TiKb MnKa1 MnKb NiKa AuLa AuFS AuLb tot_cnts'.split(' ')
                     
-                    fh_pha.flush()                    
-                    
+                    cols = Named3(ecs=ecs_cols,
+                                  bkg=bkg_cols,
+                                  pha=pha_cols)
+
+                    for f in cols._fields:
+                        fh = getattr(fhs,f)
+                        fh.write('\t'.join(getattr(cols,f))+'\n')
+                        fh.flush()
+
                     opentxt+=1
 
                 if tot_cnts>cnt_thresh:
@@ -1118,13 +1279,13 @@ def do_fit(args):
                     dg_aula= np.mean(dg_aula); dg_aula_fs= np.mean(dg_aula_fs); dg_aulb= np.mean(dg_aulb)
 
                     
-                    fh_ecs.write(fmt_ecs.format(xl,xh,yl,yh,
+                    fhs.ecs.write(fmts.ecs.format(xl,xh,yl,yh,
                                                 alka.LineE.val,alka_elo,alka_ehi,alka.width.val,alka.norm.val,
                                                 tika1.LineE.val,tika1_elo,tika1_ehi,tika1.width.val,tika1.norm.val,
                                                 tikb.LineE.val,tikb_elo,tikb_ehi,tikb.width.val,tikb.norm.val,
                                                 mnka1.LineE.val,mnka1_elo,mnka1_ehi,mnka1.width.val,mnka1.norm.val,
                                                 mnkb.LineE.val,mnkb_elo,mnkb_ehi,mnkb.width.val,mnkb.norm.val, ui.calc_stat()))
-                    fh_bkg.write(fmt_bkg.format(xl,xh,yl,yh,bkg_arr.ampl.val,
+                    fhs.bkg.write(fmts.bkg.format(xl,xh,yl,yh,bkg_arr.ampl.val,
                                                 sika.LineE.val,sika_elo,sika_ehi,sika.width.val,sika.norm.val,
                                                 auma.LineE.val,auma_elo,auma_ehi,auma.width.val,auma.norm.val,
                                                 aumb.LineE.val,aumb_elo,aumb_ehi,aumb.width.val,aumb.norm.val,
@@ -1133,21 +1294,22 @@ def do_fit(args):
                                                 aula.LineE.val,aula_elo,aula_ehi,aula.width.val,aula.norm.val,
                                                 aula_fs.LineE.val,aula_fs_elo,aula_fs_ehi,aula_fs.width.val,aula_fs.norm.val,
                                                 aulb.LineE.val,aulb_elo,aulb_ehi,aulb.width.val,aulb.norm.val))
-                    fh_pha.write(fmt_pha.format(xl,xh,yl,yh,
+                    fhs.pha.write(fmts.pha.format(xl,xh,yl,yh,
                                                 1e3*alka.LineE.val/dg_alka, 1e3*sika.LineE.val/dg_sika, 1e3*auma.LineE.val/dg_auma, 1e3*aumb.LineE.val/dg_aumb, 
                                                 1e3*tika1.LineE.val/dg_tika1, 1e3*tikb.LineE.val/dg_tikb, 1e3*mnka1.LineE.val/dg_mnka1, 1e3*mnkb.LineE.val/dg_mnkb,
                                                 1e3*nika.LineE.val/dg_nika, 1e3*aula.LineE.val/dg_aula, 1e3*aula_fs.LineE.val/dg_aula_fs,
                                                 1e3*aulb.LineE.val/dg_aulb, tot_cnts))
-                    fh_ecs.flush(); fh_bkg.flush(); fh_pha.flush()
+                    for fh in fhs:
+                        fh.flush()
 
                 else:
-                    fh_ecs.write(fmt_ecs.format(xl,xh,yl,yh,
+                    fhs.ecs.write(fmts.ecs.format(xl,xh,yl,yh,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9, np.nan))
-                    fh_bkg.write(fmt_bkg.format(xl,xh,yl,yh,999,
+                    fhs.bkg.write(fmts.bkg.format(xl,xh,yl,yh,999,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,                                            
@@ -1156,14 +1318,13 @@ def do_fit(args):
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9,
                                             9.999,-0.099,0.099,0.999,9.9e9))
-                    fh_pha.write(fmt_pha.format(xl,xh,yl,yh,
+                    fhs.pha.write(fmts.pha.format(xl,xh,yl,yh,
                                             9999, 9999, 9999, 9999, 9999,
                                             9999, 9999, 9999, 9999, 9999, 9999, 9999, tot_cnts))
-                    fh_ecs.flush(); fh_bkg.flush(); fh_pha.flush()
-
-
+                    for fh in fhs:
+                        fh.flush()
     
-    if args.pdf and pdf is not None:
+    if args.pdf:
         pdf.close()
     else:
         plt.show()
@@ -1171,8 +1332,139 @@ def do_fit(args):
 ############### MAIN RUN functions ################
 
 
-def main():
+def plot_fit(*fit_args):
+    line, nom, elo, ehi, bkg_mdl, src_mdl, plt_grp, xl, yl, args = fit_args
 
+    sxl = f'{xl:04d}'
+    sxh = f'{xl+args.binx-1:04d}'
+    syl = f'{yl:04d}'
+    syh = f'{yl+args.biny-1:04d}'
+
+    e = f'{args.epoch:03d}'
+    expo= 1e-3*ui.get_data().exposure
+    date= ui.get_data().header['DATE-OBS']
+    dyear = astropy.time.Time(date).to_value('decimalyear')
+
+    tstr = args.temps.replace(',', '-')
+
+    lwarn()
+    ui.notice()
+    ui.group_snr(1,plt_grp)
+    fplot = ui.get_fit_plot()
+    dmx = fplot.dataplot.x
+    daty = fplot.dataplot.y;
+    datye = fplot.dataplot.yerr
+    prat = ui.get_ratio_plot()
+    ## ungrouped model & component plot
+    ui.ungroup()
+
+    pmdl= ui.get_model_component_plot(bkg_mdl+src_mdl)
+    mdlx=(pmdl.xlo+pmdl.xhi)/2.
+    mdly= pmdl.y
+    pbkg= ui.get_model_component_plot(bkg_mdl)
+    xbkg=(pbkg.xlo+pbkg.xhi)/2.
+    ybkg= pbkg.y
+    yal= ui.get_model_component_plot(alka+alkb).y
+    ysi= ui.get_model_component_plot(sika+sikb).y
+    ytika= ui.get_model_component_plot(tika1+tika2).y
+    ytikb= ui.get_model_component_plot(tikb).y
+    pmnka= ui.get_model_component_plot(mnka1+mnka2)
+    xcomp= (pmnka.xlo+pmnka.xhi)/2.
+    ymnka= pmnka.y
+    ymnkb= ui.get_model_component_plot(mnkb).y
+    yaum= ui.get_model_component_plot(auma+aumb).y
+    ynik= ui.get_model_component_plot(nika+nikb).y
+    yaul= ui.get_model_component_plot(aula+aulb+aula_fs).y
+
+    yaxl= 0.25*min(mdly[np.where( (3<mdlx) & (mdlx<9) & (mdly>0) )])
+    yaxh=5*max(mdly)
+    xax=[1,14]; yax=[yaxl,yaxh]
+
+    fig, ax= plt.subplots(2,1,sharex=1)
+
+    fig.canvas.manager.set_window_title(args.ccd.upper()+f': x= {sxl}-{sxh}, y= {syl}-{syh}')
+
+    my_lef=0.1; my_rt=0.95; my_bot=0.08; my_top=0.93; my_hs=0; my_ws=0.2
+    fig.subplots_adjust(left=my_lef, right=my_rt, bottom=my_bot, top=my_top, hspace=my_hs, wspace=my_ws)
+    ## fit plot
+    lw1=1; lw2=0.5
+    ax[0].errorbar(dmx, daty, datye, fmt='+', ecolor='k', mec='k', ms=2, mew=0.5, elinewidth=0.5, zorder=0)
+    ax[0].plot(mdlx, mdly, '-', c='orange', lw=lw1,zorder=100)
+    ax[0].plot(xbkg, ybkg, '--', c='grey', lw=lw2)
+
+    colors = ('blue', 'grey', 'lime', 'lime', 'red', 'red', 'cyan', 'green', 'magenta')
+    y = (yal, ysi, ytika, ytikb, ymnka, ymnkb, yaum, ynik, yaul)
+    for i in range(len(y)):
+        ax[0].plot(xcomp, y[i], '--', c=colors[i], lw=lw2)
+
+    ## plot narrow-window fit bounds
+    ax[0].hlines(0.9*yaxh,ig.mn[0],ig.mn[1],color='blue',lw=1)
+    ax[0].hlines(0.85*yaxh,ig.ti[0],ig.ti[1],color='blue',lw=1)
+    ax[0].hlines(0.9*yaxh,ig.al[0],ig.al[1],color='blue',lw=1)
+    ax[0].hlines(0.85*yaxh,ig.si[0],ig.si[1],color='blue',lw=1)
+
+    ## ratio plot
+    ax[1].step(prat.x, prat.y, '-', c='orange', lw=lw1,zorder=100, where='mid')
+    ax[1].axhline(1, c='black', lw=0.5, ls='--')
+
+    ## titles/axis/etc
+    ax[0].set_yscale('log'); ax[0].set_xscale('log')
+    ax[0].set_ylim(yax); ax[0].set_xlim(xax)
+    ax[0].set_xticks([1,2,3,4,5,6,8,10,12,14])
+    ax[0].get_xaxis().set_major_formatter(ScalarFormatter())
+    ax[1].set_yscale('linear'); ax[1].set_ylim([0.5,1.5])
+
+    ##
+    fig.suptitle(f'{args.ccd.upper()}\t{e}\t{dyear:.3f}+'.expandtabs())
+    ax[0].text(0.02,0.94,f'x= {sxl}-{sxh} \ny= {syl}-{syh}', transform=ax[0].transAxes, va='top', ha='left')
+    ax[0].text(0.98,0.94,f'-{tstr} $^\\circ$C \n{expo:.1f} ksec \nplot grouping SNR= {plt_grp}', transform=ax[0].transAxes, va='top', ha='right')
+    ax[0].set(ylabel='cnt/sec/keV')
+    ax[1].set(xlabel='keV', ylabel='data/model')
+    ##
+    ax[0].text(xax[1]*0.01,yaxl*1.2,r'$\Delta$ eV', va='bottom', ha='left',fontsize=10)
+
+    ##
+    line1= 1.1; line2= 1.7
+    lline = (l for l in line)
+    lnom = (n for n in nom)
+    lelo = (lo for lo in elo)
+    lehi = (hi for hi in ehi)
+    # for l, nom, elo, ehi in zip(lline, lnom, lelo, lehi):
+    #     ax[0].text(l.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+    #                format(1e3*(l.LineE.val-nom),1e3*ehi,1e3*elo), va='bottom', ha='center',fontsize=8)
+    ax[0].text(line.alka.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.alka.LineE.val-nom.alka),1e3*ehi.alka,1e3*elo.alka), va='bottom', ha='center',fontsize=8)
+    ax[0].text(line.sika.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.sika.LineE.val-nom.sika),1e3*ehi.sika,1e3*elo.sika), va='bottom', ha='center',fontsize=8, c='grey')
+    ax[0].text(line.sikb.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.sikb.LineE.val-nom.sikb),1e3*ehi.sikb,1e3*elo.sikb), va='bottom', ha='center',fontsize=8, c='grey') 
+    ##
+    ax[0].text(line.tika1.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.tika1.LineE.val-nom.tika1),1e3*ehi.tika1,1e3*elo.tika1), va='bottom', ha='center',fontsize=8)
+    ax[0].text(line.tikb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.tikb.LineE.val-nom.tikb),1e3*ehi.tikb,1e3*elo.tikb), va='bottom', ha='center',fontsize=8, c='grey')
+    ##
+    ax[0].text(line.mnka1.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.mnka1.LineE.val-nom.mnka1),1e3*ehi.mnka1,1e3*elo.mnka1), va='bottom', ha='center',fontsize=8)
+    ax[0].text(line.mnkb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.mnkb.LineE.val-nom.mnkb),1e3*ehi.mnkb,1e3*elo.mnkb), va='bottom', ha='center',fontsize=8, c='grey')
+    ##
+    ax[0].text(line.auma.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.auma.LineE.val-nom.auma),1e3*ehi.auma,1e3*elo.auma), va='bottom', ha='center',fontsize=8, c='grey')
+    ax[0].text(line.aumb.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.aumb.LineE.val-nom.aumb),1e3*ehi.aumb,1e3*elo.aumb), va='bottom', ha='center',fontsize=8, c='grey')
+    ##
+    ax[0].text(line.nika.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.nika.LineE.val-nom.nika),1e3*ehi.nika,1e3*elo.nika), va='bottom', ha='center',fontsize=8, c='grey')
+    ax[0].text(line.nikb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.nikb.LineE.val-nom.nikb),1e3*ehi.nikb,1e3*elo.nikb), va='bottom', ha='center',fontsize=8, c='grey')
+    ##
+    ax[0].text(line.aula.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.aula.LineE.val-nom.aula),1e3*ehi.aula,1e3*elo.aula), va='bottom', ha='center',fontsize=8, c='grey')
+    ax[0].text(line.aulb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.aulb.LineE.val-nom.aulb),1e3*ehi.aulb,1e3*elo.aulb), va='bottom', ha='center',fontsize=8, c='grey')
+
+def main():
     parser = argparse.ArgumentParser(
         description='Fit an ECS epoch.'
     )
