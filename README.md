@@ -55,5 +55,5 @@ done
 Finally, to plot fitted line energy deviations (currently 256x256y),
 ```
 ciao
-python3 src/plt_spec.py $tstr Al|Mn $epochs -p out.pdf
+python3 src/plot_ecs_ediff.py $tstr Al|Mn|Ti $epochs -p out.pdf
 ```
