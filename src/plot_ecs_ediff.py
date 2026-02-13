@@ -104,7 +104,7 @@ def year_mid_epoch(e):
     date_str = f'{year:04d}-{month+1:02d}-{15}'
     return datetime.strptime(date_str, '%Y-%m-%d')
 
-def plt_spec(args):
+def plot_ecs_ediff(args):
     global nom
     nom = {
         'Al':1.487,
@@ -185,7 +185,7 @@ def main():
     args = parser.parse_args()
     if args.det is None:
         args.det = ['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
-    plt_spec(args)
+    plot_ecs_ediff(args)
 
 if __name__ == '__main__':
     main()
