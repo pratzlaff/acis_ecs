@@ -37,7 +37,7 @@ def epoch_start(epoch):
     return year, month
 
 def mkplot(args, data, ccd):
-    f,ax= plt.subplots(4, 1, sharex=1)
+    f,ax= plt.subplots(4, 1, sharex=True)
     f.canvas.manager.set_window_title(ccd.upper())
     f.subplots_adjust(left=0.1, right=0.95, bottom=0.08, top=0.93, hspace=0)
     c = ['cyan','red','orange','lime']
