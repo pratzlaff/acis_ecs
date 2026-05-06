@@ -7,9 +7,7 @@ import numpy as np
 import os
 import sys
 
-ecsid=os.environ['ECSID']
-srcdir=os.path.dirname(__file__)
-datadir=os.popen(srcdir+'/datadir').read()
+from ECSFit import ecsid, datadir
 
 def plt_prefs():
     plt.rc('ytick', direction='in', color='gray', right=1)
@@ -110,7 +108,7 @@ def plot_ecs_ediff(args):
         'Al':1.487,
         'Ti':4.511,
         'Mn':5.895,
-    }.get(args.line)
+    }[args.line]
 
     plt_prefs()
 
@@ -132,11 +130,15 @@ def plot_ecs_ediff(args):
         years = np.array([year_mid_epoch(e) for e in args.epochs])
 
         for i, e in enumerate(args.epochs):
-            inf=f'{datadir}/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
+            if args.nick:
+                inf=f'/home/rpete/hal9000/ECS_fits/fits/e{e:d}/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
+            else:
+                inf=f'{datadir}/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
+
             lineE_col = { 'Al':4,
                           'Ti':9,
                           'Mn':19,
-                         }.get(args.line)
+                         }[args.line]
             try:
                 usecols = [0,2] + list(range(lineE_col, lineE_col+3)) + [-1]
                 (xl,yl,li,li_lo,li_hi,stat)= np.loadtxt(inf, skiprows=2, unpack=1, usecols=usecols)
@@ -178,6 +180,7 @@ def main():
         description='Plot fit results'
     )
     parser.add_argument('-p', '--pdf', help='Output PDF file.')
+    parser.add_argument('-n', '--nick', action='store_true', help="Use Nick's ecs.txt file paths.")
     parser.add_argument('temps', help='e.g., 120,119,118')
     parser.add_argument('line', choices=['Al','Ti','Mn'])
     parser.add_argument('epochs', type=int, nargs='+')

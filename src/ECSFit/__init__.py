@@ -1,6 +1,11 @@
 from collections import namedtuple
+import os
 
 from .Types import LineIgnores, XSlorentzPs, XSlorentzP, LineEP, WidthP, NormP
+
+ecsid=os.environ['ECSID']
+srcdir=os.path.dirname(__file__)+'/..'
+datadir=os.popen(srcdir+'/datadir').read()
 
 Ignore = LineIgnores(al=[1.2, 2.0],
                  mn=[5.2, 7.1],
