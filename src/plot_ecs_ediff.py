@@ -131,7 +131,7 @@ def plot_ecs_ediff(args):
 
         for i, e in enumerate(args.epochs):
             if args.nick:
-                inf=f'/home/rpete/hal9000/ECS_fits/fits/e{e:d}/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
+                inf=f'/data/hal9000/ECS_fits/fits/e{e:d}/fpt_{fpt}_256x256y_yesTG/{ccd}_ecs.txt'
             else:
                 inf=f'{datadir}/e{e:03d}/fits/{ecsid}/fits/fpt_{fpt}_256x256y/{ccd}_ecs.txt'
 

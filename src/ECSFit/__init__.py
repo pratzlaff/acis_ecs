@@ -1,9 +1,14 @@
 from collections import namedtuple
 import os
+import sys
 
 from .Types import LineIgnores, XSlorentzPs, XSlorentzP, LineEP, WidthP, NormP
 
-ecsid=os.environ['ECSID']
+try:
+    ecsid=os.environ['ECSID']
+except:
+    ecsid=None
+    sys.stderr.write(f'ECSID environment variable does not exist, setting {ecsid=}\n')
 srcdir=os.path.dirname(__file__)+'/..'
 datadir=os.popen(srcdir+'/datadir').read()
 
