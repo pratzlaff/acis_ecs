@@ -170,13 +170,13 @@ def do_fit(args):
 
     bin = int(f'{xbin}{ybin}')
 
-    bscls = {
-        32:{ 32:1/64, 64:1/32, 128:1/16, 256:1/8 },
-        64:{ 256:1/4 },
-        128:{ 256:1/2 },
-        256:{ 256:1 }
-    }
-    bscl = bscls[xbin][ybin]
+    bscl= 1/(256/xbin) * (256/ybin)
+
+    if xbin<32:
+        bscl=2e-2*bscl
+    bkg_lines_scl= 1
+    if xbin<32:
+        bkg_lines_scl=1e-3
 
     ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
 
@@ -227,7 +227,6 @@ def do_fit(args):
         sxl = f'{xl:04d}'
         sxh = f'{xh:04d}'
 
-        sicol=0
         for yl in range(ystart,1025,ybin):
             linfo()
             yh= yl+ybin-1
@@ -253,10 +252,20 @@ def do_fit(args):
                 date= ui.get_data().header['DATE-OBS']
                 dyear = astropy.time.Time(date).to_value('decimalyear')
 
-                tmin = np.array([int(t) for t in tstr.split('-')]).max()
-                rmf = get_rmffile(ccd, tmin, xl, yl, args.binx, args.biny)
+                if xbin<32: ## use 32x128 resolution responses
+                    rsp_xbin=32; rsp_ybin=128
+                    rsp_xl= 1+int(32 * round(float(xl)/32)))
+                    rsp_yl= 1+int(128 * round(float(yl)/128)))
+                    if rsp_xl==1025: rsp_xl= 993
+                    if rsp_yl==1025: rsp_yl= 897
+                else:
+                    rsp_xbin=xbin; rsp_ybin=ybin
+                    rsp_xl= xl; rsp_yl= yl
 
-                arf = get_arffile(ccd, dyear, xl, yl, args.binx, args.biny)
+                tmin = np.array([int(t) for t in tstr.split('-')]).max()
+                rmf = get_rmffile(ccd, tmin, rsp_xl, rsp_yl, rsp_xbin, rsp_ybin)
+
+                arf = get_arffile(ccd, dyear, rsp_xl, rsp_yl, rsp_xbin, rsp_ybin)
 
                 ui.load_rmf(rmf)
                 ui.load_arf(arf)
@@ -269,11 +278,13 @@ def do_fit(args):
                 lwarn() if verbose<2 else linfo()
 
             ## turn on/off fit blocks, debugging/low-counts/BI
-            fields = 'bkginitlines init mn ti al si aum nika nikb aula aufs aulb'.split(' ')
+            fields = 'init mn ti al si aum nika nikb aula aufs aulb'.split(' ')
             ToFit = namedtuple('ToFit', fields, defaults=(True,)*len(fields))
 
             if tot_cnts<800 or ccd=='s1' or ccd=='s1_noCTI' or ccd=='s3' or ccd=='s3_noCTI':
                 tofit = ToFit(aum=False, nikb=False, aufs=False)
+            elif xbin<32:
+                tofit = ToFit(si=False, aum=False, nika=False, nikb=False, aula=False, aufs=False, aulb=False)
             else:
                 tofit = ToFit()
 
@@ -363,27 +374,34 @@ def do_fit(args):
                 ## BKG lines
                 ui.xslorentz.sika;
                 set_line('sika')
+                sika.norm *= bkg_lines_scl
 
                 ui.xslorentz.sikb;
                 set_line('sikb')
+                sikb.norm *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.auma;
                 set_line('auma')
+                auma.norm *= bkg_lines_scl
 
                 ui.xslorentz.aumb;
                 set_line('aumb')
+                aumb.norm *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.nika;
                 set_line('nika', shift=ig_shift)
+                nika.norm *= bkg_lines_scl
 
                 ui.xslorentz.nikb;
                 set_line('nikb', shift=ig_shift)
+                nikb.norm *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.aula;
                 set_line('aula', shift=1.2*ig_shift)
+                aula.norm *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.aula_fs
@@ -398,6 +416,7 @@ def do_fit(args):
                 ##
                 ui.xslorentz.aulb;
                 set_line('aulb', shift=1.3*ig_shift)
+                aulb.norm *= bkg_lines_scl
 
                 bkg_mdl=rsp_bkg(bkg_arr+ sika+ sikb+ auma+ aumb+ nika +nikb +aula +aula_fs +aulb)
                 ## fit bkg scaling
@@ -412,9 +431,6 @@ def do_fit(args):
                 ui.group_snr(fit_grp)
                 lwarn()
                 ui.freeze(bkg_mdl)
-
-                if tofit.bkginitlines:
-                    ui.thaw(bkg_arr)
 
                 if tofit.nikb:
                     ui.thaw(nikb)
@@ -450,13 +466,13 @@ def do_fit(args):
                 ## Si-Ka
                 sika.LineE= alka.LineE+sika_nom-alka_nom
                 sika.Width= 0.001
-                val= bscl*8e-3*nscl
+                val= bkg_lines_scl*bscl*8e-3*nscl
                 ui.set_par(sika.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
 
                 ## Si-Kb
                 sikb.LineE= alka.LineE+sikb_nom-alka_nom
                 sikb.Width= 0.001
-                val= bscl*5e-3*nscl
+                val= bkg_lines_scl*bscl*5e-3*nscl
                 ui.set_par(sikb.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
                 
                 ##################
@@ -514,7 +530,12 @@ def do_fit(args):
                     ui.ignore(f':{iglo},{ighi}:')
                     ui.group_snr(fit_grp)
                     ui.thaw(src_mdl)
-                    ui.thaw(sika, sikb, auma, aumb, nika)
+                    if tofit.si:
+                        ui.thaw(sika, sikb)
+                    if tofit.aum:
+                        ui.thaw(auma, aumb)
+                    if tofit.nika:
+                        ui.thaw(nika)
                     ui.freeze(sika.width, sikb.width, auma.width, aumb.width, nika.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1)
@@ -1197,7 +1218,7 @@ def do_fit(args):
                                  auma=auma_ehi,
                                  aumb=aumb_ehi,
                                  )
-                fit_args = (lines, nom, elo, ehi, bkg_mdl, src_mdl, plt_grp, xl, yl, args, )
+                fit_args = (lines, nom, elo, ehi, bkg_mdl, src_mdl, plt_grp, xl, yl, args, tofit)
                 fig = plot_fit(*fit_args)
                 if args.pdf:
                     pdf.savefig(fig)
@@ -1251,7 +1272,7 @@ def do_fit(args):
 
                 if tot_cnts>cnt_thresh:
                     ## get det_gain PHA conversion
-                    idx_list,= np.where( (dg_ccd==ccd_id) & (dg_xl>=xl) & (dg_xl<xh) & (dg_yl>=yl) & (dg_yl<yh) )
+                    idx_list,= np.where( (dg_ccd==ccd_id) & (dg_xl>=xl) & (dg_xl<max(xh,xl+32)) & (dg_yl>=yl) & (dg_yl<max(yh,yl+32)) )
                     dg_alka=[]; dg_tika1=[]; dg_tikb=[]; dg_mnka1=[]; dg_mnkb=[]
                     dg_sika=[]; dg_auma=[]; dg_aumb=[]; dg_nika=[]; dg_aula=[]; dg_aula_fs=[]; dg_aulb=[]
                     for i in range(0,idx_list.size):
@@ -1333,7 +1354,7 @@ def do_fit(args):
 
 
 def plot_fit(*fit_args):
-    line, nom, elo, ehi, bkg_mdl, src_mdl, plt_grp, xl, yl, args = fit_args
+    line, nom, elo, ehi, bkg_mdl, src_mdl, plt_grp, xl, yl, args, tofit = fit_args
 
     sxl = f'{xl:04d}'
     sxh = f'{xl+args.binx-1:04d}'
@@ -1398,10 +1419,14 @@ def plot_fit(*fit_args):
         ax[0].plot(xcomp, y[i], '--', c=colors[i], lw=lw2)
 
     ## plot narrow-window fit bounds
-    ax[0].hlines(0.9*yaxh,ig.mn[0],ig.mn[1],color='blue',lw=1)
-    ax[0].hlines(0.85*yaxh,ig.ti[0],ig.ti[1],color='blue',lw=1)
-    ax[0].hlines(0.9*yaxh,ig.al[0],ig.al[1],color='blue',lw=1)
-    ax[0].hlines(0.85*yaxh,ig.si[0],ig.si[1],color='blue',lw=1)
+    if tofit.mn:
+        ax[0].hlines(0.9*yaxh,ig.mn[0],ig.mn[1],color='blue',lw=1)
+    if tofit.ti:
+        ax[0].hlines(0.85*yaxh,ig.ti[0],ig.ti[1],color='blue',lw=1)
+    if tofit.al:
+        ax[0].hlines(0.9*yaxh,ig.al[0],ig.al[1],color='blue',lw=1)
+    if tofit.si:
+        ax[0].hlines(0.85*yaxh,ig.si[0],ig.si[1],color='blue',lw=1)
 
     ## ratio plot
     ax[1].step(prat.x, prat.y, '-', c='orange', lw=lw1,zorder=100, where='mid')
