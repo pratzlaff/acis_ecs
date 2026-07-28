@@ -1,6 +1,6 @@
 #! /bin/bash
 
-rsync -avnz --delete \
+rsync -avzn --delete \
   /data/legs/rpete/data/ECS/e??? \
   localhost:/data/legs/rpete/data/ECS \
   --exclude '[0-9]*' \
@@ -9,6 +9,6 @@ rsync -avnz --delete \
   --exclude support \
   --exclude evt2 \
   --exclude spec \
-  --exclude figs \
+  --exclude '*2.txt' \
   --exclude ciao4.17.0_caldb4.12.2 \
   --exclude fits.bak
