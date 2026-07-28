@@ -36,6 +36,7 @@ Further, compressing the merge `evt2` files can reduce their size by
 
 To extract spectra for a specific temperature range and chip binning, e.g.,
 ```
+screen
 tstrs='120,119,118 117,116 115,114 113,112 111,110 109,108 107,106'
 binx=256
 biny=256
@@ -47,9 +48,7 @@ and those spectra end up in `$datadir/e{epoch:03d}/fits/$ECSID/spec/` subdirecto
 
 To fit those spectra,
 ```
-time for tstr in $tstrs; do
-    src/fit_epochs $tstr $binx $biny $epochs
-done
+time src/fit_epochs "$tstrs" $binx $biny $epochs
 ```
 
 Finally, to plot fitted line energy deviations (currently 256x256y),
