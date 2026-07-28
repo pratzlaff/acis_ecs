@@ -283,10 +283,6 @@ def do_fit(args):
                 plt_grp=2
                 if tot_cnts<200:
                     fit_grp=1
-                if tot_cnts>1000:
-                    plt_grp=3
-                if tot_cnts>4000:
-                    plt_grp=4
 
                 ## run conf errors switches
                 doerr=0  ## reset each run
@@ -834,7 +830,7 @@ def do_fit(args):
                 ## SiK fits                    
                 if tofit.si:
                     val= alka.LineE.val +sika_nom-alka_nom; ui.set_par(sika.LineE, val, min= val-0.04, max= val+0.04)
-                    if sika.norm.val>1e-5*alka.norm.val: sika.norm.val= 2e-5*alka.norm.val
+                    if sika.norm.val<1e-5*alka.norm.val: sika.norm.val= 2e-5*alka.norm.val ##changed '>' to '<' 5/13/2026
                     val= sika.norm.val; ui.set_par(sika.norm, val, min=1e-5*alka.norm.val, max=0.5*alka.norm.val)
 
                     val= alka.LineE.val +sikb_nom-alka_nom; ui.set_par(sikb.LineE, val, min= val-0.04, max= val+0.04)
@@ -849,8 +845,8 @@ def do_fit(args):
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
                     ## SiKa errors
+                    doerr=1
                     if doerr==1 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
-                        ui.set_method('levmar')
                         iglo=sika.LineE.val-0.4; ighi=sika.LineE.val+0.4; ign=':{},{}:'.format(iglo,ighi)
                         lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
                         rstat= ui.get_fit_results().rstat; errl=None; errh=None
