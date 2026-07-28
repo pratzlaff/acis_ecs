@@ -577,8 +577,9 @@ def do_fit(ccd):
                 if fitmn:
                     ## untie Mn-Kb from Ka
                     val= mnka1.LineE.val+mnkb_nom-mnka1_nom
-                    ui.set_par(mnkb.LineE, val, min= val-0.02, max= val+0.02)
-                    val= mnka1.width.val; ui.set_par(mnkb.Width, val, min= 0.001, max= val+0.005)                    
+                    vmin= min(val-0.02,mnkb_nom-0.02); vmax= max(val+0.02,mnkb_nom+0.02)
+                    ui.set_par(mnkb.LineE, val, min= vmin, max= vmax)
+                    val= mnka1.width.val; ui.set_par(mnkb.Width, val, min= 0.001, max= val+0.005)
                     val= mnka1.norm.val*0.21; ui.set_par(mnkb.norm, val, min=0.15*mnka1.norm.val, max=0.25*mnka1.norm.val)
                     
                     mn_iglo=5.2; mn_ighi=7.1; ign=':{},{}:'.format(mn_iglo,mn_ighi)                    

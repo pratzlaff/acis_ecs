@@ -162,12 +162,6 @@ def set_line(lstr, shift=0):
 #################################################
 def do_fit(args):
 
-    if args.pdf:
-        plt_dir= os.path.dirname(args.pdf)
-        if plt_dir and not os.path.exists(plt_dir):
-            os.makedirs(plt_dir, exist_ok=True)
-        pdf = PdfPages(args.pdf)
-
     ccd = args.ccd
     xbin = args.binx
     ybin = args.biny
@@ -197,6 +191,15 @@ def do_fit(args):
     if not os.path.exists(spec_dir):
         sys.stderr.write(f'does not exist: {spec_dir}\n')
         sys.exit(1)
+
+    if args.pdf:
+        if args.pdf.lower() == 'default':
+            args.pdf = f'{fit_dir}/fig/{ccd}.pdf'
+        print(args.pdf)
+        plt_dir= os.path.dirname(args.pdf)
+        if plt_dir and not os.path.exists(plt_dir):
+            os.makedirs(plt_dir, exist_ok=True)
+        pdf = PdfPages(args.pdf)
 
     linfo()
 
@@ -529,7 +532,8 @@ def do_fit(args):
                     ##----------
                     ## untie Mn-Kb from Ka
                     val= mnka1.LineE.val+mnkb_nom-mnka1_nom
-                    ui.set_par(mnkb.LineE, val, min= val-0.02, max= val+0.02)
+                    vmin= min(val-0.02,mnkb_nom-0.02); vmax= max(val+0.02,mnkb_nom+0.02)
+                    ui.set_par(mnkb.LineE, val, min= vmin, max= vmax)
                     val= mnka1.width.val
                     ui.set_par(mnkb.Width, val, min= 0.001, max= val+0.005)
                     val= mnka1.norm.val*0.21
@@ -1469,7 +1473,7 @@ def main():
         description='Fit an ECS epoch.'
     )
     parser.add_argument('-p', '--pdf', help='Output PDF file.')
-    parser.add_argument('temps', help='e.g., 120,119,118')
+    parser.add_argument('temps', help='e.g., 120,119,118 or 120-119-118')
     parser.add_argument('binx', type=int)
     parser.add_argument('biny', type=int)
     #parser.add_argument('--foo', default=True, action=argparse.BooleanOptionalAction, help='--no-foo to change.')
