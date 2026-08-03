@@ -520,15 +520,18 @@ def do_fit(args):
                 ui.set_full_model(1, bkg_mdl + src_mdl)
                 ui.freeze(src_mdl,bkg_mdl)
 
-                #################                
-                if tofit.init:
-                    ## initial rough fit
+                def prep_1(iglo, ighi):
                     lwarn()
                     ui.notice()
                     ui.ungroup()
-                    iglo, ighi = 1.1, 8.5
                     ui.ignore(f':{iglo},{ighi}:')
                     ui.group_snr(fit_grp)
+
+                #################
+                if tofit.init:
+                    ## initial rough fit
+                    iglo, ighi = 1.1, 8.5
+                    prep_1(iglo, ighi)
                     ui.thaw(src_mdl)
                     if tofit.si:
                         ui.thaw(sika, sikb)
@@ -556,11 +559,7 @@ def do_fit(args):
                     val= mnka1.norm.val*0.21
                     ui.set_par(mnkb.norm, val, min=0.15*mnka1.norm.val, max=0.25*mnka1.norm.val)
 
-                    lwarn()
-                    ui.notice()
-                    ui.ungroup()
-                    ui.ignore(f':{ig.mn[0]},{ig.mn[1]}:')
-                    ui.group_snr(fit_grp)
+                    prep_1(ig.mn[0], ig.mn[1])
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(mnka1, mnka2, mnkb)
                     lwarn() if verbose<2 else linfo()
@@ -676,11 +675,7 @@ def do_fit(args):
                     val= 0.201*tika1.norm.val
                     ui.set_par(tikb.norm, val, min=0.15*tika1.norm.val, max=0.30*tika1.norm.val)
 
-                    lwarn()
-                    ui.notice()
-                    ui.ungroup()
-                    ui.ignore(f':{ig.ti[0]},{ig.ti[1]}:')
-                    ui.group_snr(fit_grp)
+                    prep_1(ig.ti[0], ig.ti[1])
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(tika1, tika2, tikb)
                     lwarn() if verbose<2 else linfo()
@@ -790,13 +785,7 @@ def do_fit(args):
                     sika.LineE= alka.LineE.val +sika_nom-alka_nom; sika.Width= alka.width.val; sika.norm= sika.norm.val
                     sikb.LineE= alka.LineE.val +sikb_nom-alka_nom; sikb.Width= alka.width.val; sikb.norm= sikb.norm.val                    
                     ## Al-only tight window fwhm
-                    al_iglo= 1.2
-                    al_ighi=2.0
-                    lwarn()
-                    ui.notice()
-                    ui.ungroup()
-                    ui.ignore(f':{ig.al[0]},{ig.al[1]}:')
-                    ui.group_snr(fit_grp)
+                    prep_1(ig.al[0], ig.al[1])
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(alka, alkb)
                     ui.freeze(alka.width)
@@ -858,10 +847,9 @@ def do_fit(args):
                     if sikb.norm.val>1e-5*alka.norm.val: sikb.norm.val= 2e-5*alka.norm.val
                     val= sikb.norm.val; ui.set_par(sikb.norm, val, min=1e-5*alka.norm.val, max=0.5*alka.norm.val)
                     
-                    si_iglo= sika.LineE.val-0.2; si_ighi=sika.LineE.val+0.2; ign=':{},{}:'.format(si_iglo,si_ighi)
                     ig.si[0] = sika.LineE.val-0.2
                     ig.si[1] = sika.LineE.val+0.2
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    prep_1(ig.si[0], ig.si[1])
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sika); ui.freeze(sika.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -889,10 +877,9 @@ def do_fit(args):
                         errl=-0.099; errh=0.099
                     sika_elo= errl; sika_ehi=errh
 
-                    si_iglo= sikb.LineE.val-0.2; si_ighi=sikb.LineE.val+0.2; ign=':{},{}:'.format(si_iglo,si_ighi)
                     ig.si[0] = sikb.LineE.val-0.2
                     ig.si[1] = sikb.LineE.val+0.2
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    prep_1(ig.si[0], ig.si[1])
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sikb); ui.freeze(sikb.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -930,8 +917,8 @@ def do_fit(args):
                     aumb.LineE= aumb.LineE.val
                     
                     ## Au-Ma
-                    aum_iglo= 1.9; aum_ighi= 2.7; ign=':{},{}:'.format(aum_iglo,aum_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    aum_iglo, aum_ighi= 1.9, 2.7
+                    prep_1(aum_iglo, aum_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(auma); ui.freeze(auma.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -959,8 +946,8 @@ def do_fit(args):
 
                     ## Au-Mb
                     val= aumb.LineE.val; ui.set_par(aumb.LineE, val, min=val-0.04, max= val+0.1)
-                    aum_iglo= 1.9; aum_ighi= 2.7; ign=':{},{}:'.format(aum_iglo,aum_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    aum_iglo, aum_ighi= 1.9, 2.7
+                    prep_1(aum_iglo, aum_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aumb); ui.freeze(aumb.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -995,8 +982,8 @@ def do_fit(args):
                 if tofit.nika:
                     ##----------
                     ## Ni-Ka +- fwhm
-                    ni_iglo= nika.LineE.val-0.2; ni_ighi= nika.LineE.val+0.2; ign=':{},{}:'.format(ni_iglo,ni_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    ni_iglo, ni_ighi = nika.LineE.val-0.2, nika.LineE.val+0.2
+                    prep_1(ni_iglo, ni_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(nika); ui.freeze(nika.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -1026,8 +1013,8 @@ def do_fit(args):
 
                 ## Ni-Kb +- fwhm                    
                 if tofit.nikb:
-                    ni_iglo= nikb.LineE.val-0.2; ni_ighi= nikb.LineE.val+0.2; ign=':{},{}:'.format(ni_iglo,ni_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    ni_iglo, ni_ighi = nikb.LineE.val-0.2, nikb.LineE.val+0.2
+                    prep_1(ni_iglo, ni_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(nikb); ui.freeze(nikb.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -1061,8 +1048,8 @@ def do_fit(args):
                 #################                    
                 if tofit.aula:
                     ## Au-La +- fwhm
-                    aula_iglo= aula.LineE.val-0.2; aula_ighi= aula.LineE.val+0.2; ign=':{},{}:'.format(aula_iglo,aula_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    aula_iglo, aula_ighi = aula.LineE.val-0.2, aula.LineE.val+0.2
+                    prep_1(aula_iglo, aula_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aula.LineE)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -1096,8 +1083,8 @@ def do_fit(args):
                     val= aula_nom+ aula_fs_shif; ui.set_par(aula_fs.LineE, val, min= val-0.2, max= val+0.2)
                     val= aula_fs.norm.val; ui.set_par(aula_fs.norm, val, min= aula.norm.val*0.01, max= aula.norm.val)
 
-                    aula_fs_iglo= aula_fs.LineE.val-0.4; aula_fs_ighi= aula_fs.LineE.val+0.4; ign=':{},{}:'.format(aula_fs_iglo,aula_fs_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    aula_fs_iglo, aula_fs_ighi = aula_fs.LineE.val-0.4, aula_fs.LineE.val+0.4
+                    prep_1(aula_fs_iglo, aula_fs_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aula_fs); ui.freeze(aula_fs.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
@@ -1128,8 +1115,8 @@ def do_fit(args):
 
                 ## Au-Lb+Lb +- fwhm                    
                 if tofit.aulb:
-                    aulb_iglo= aulb.LineE.val-0.3; aulb_ighi= aulb.LineE.val+0.3; ign=':{},{}:'.format(aulb_iglo,aulb_ighi)
-                    lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
+                    aulb_iglo, aulb_ighi = aulb.LineE.val-0.3, aulb.LineE.val+0.3
+                    prep_1(aulb_iglo, aulb_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aulb); ui.freeze(aulb.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1); lwarn()
