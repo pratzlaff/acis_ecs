@@ -254,8 +254,8 @@ def do_fit(args):
 
                 if xbin<32: ## use 32x128 resolution responses
                     rsp_xbin=32; rsp_ybin=128
-                    rsp_xl= 1+int(32 * round(float(xl)/32)))
-                    rsp_yl= 1+int(128 * round(float(yl)/128)))
+                    rsp_xl= 1+int(32 * round(float(xl)/32))
+                    rsp_yl= 1+int(128 * round(float(yl)/128))
                     if rsp_xl==1025: rsp_xl= 993
                     if rsp_yl==1025: rsp_yl= 897
                 else:
@@ -374,34 +374,34 @@ def do_fit(args):
                 ## BKG lines
                 ui.xslorentz.sika;
                 set_line('sika')
-                sika.norm *= bkg_lines_scl
+                sika.norm.val *= bkg_lines_scl
 
                 ui.xslorentz.sikb;
                 set_line('sikb')
-                sikb.norm *= bkg_lines_scl
+                sikb.norm.val *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.auma;
                 set_line('auma')
-                auma.norm *= bkg_lines_scl
+                auma.norm.val *= bkg_lines_scl
 
                 ui.xslorentz.aumb;
                 set_line('aumb')
-                aumb.norm *= bkg_lines_scl
+                aumb.norm.val *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.nika;
                 set_line('nika', shift=ig_shift)
-                nika.norm *= bkg_lines_scl
+                nika.norm.val *= bkg_lines_scl
 
                 ui.xslorentz.nikb;
                 set_line('nikb', shift=ig_shift)
-                nikb.norm *= bkg_lines_scl
+                nikb.norm.val *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.aula;
                 set_line('aula', shift=1.2*ig_shift)
-                aula.norm *= bkg_lines_scl
+                aula.norm.val *= bkg_lines_scl
 
                 ##
                 ui.xslorentz.aula_fs
@@ -416,7 +416,7 @@ def do_fit(args):
                 ##
                 ui.xslorentz.aulb;
                 set_line('aulb', shift=1.3*ig_shift)
-                aulb.norm *= bkg_lines_scl
+                aulb.norm.val *= bkg_lines_scl
 
                 bkg_mdl=rsp_bkg(bkg_arr+ sika+ sikb+ auma+ aumb+ nika +nikb +aula +aula_fs +aulb)
                 ## fit bkg scaling
