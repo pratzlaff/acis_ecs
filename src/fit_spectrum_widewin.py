@@ -576,8 +576,6 @@ def do_fit(args):
                         else:
                             return -0.099, 0.099
 
-                _5c1bdd5 = False
-
                 #################
                 if tofit.init:
                     ## initial rough fit
@@ -657,113 +655,20 @@ def do_fit(args):
                     lwarn()
                     
                     ## Tia errors
-                    if _5c1bdd5:
-                        if doerr==1:
-                            try:
-                                ui.set_method('levmar')
-                                lwarn()
-                                ui.notice()
-                                ui.ungroup()
-                                iglo=tika1.LineE.val-0.4
-                                ighi=tika1.LineE.val+0.4
-                                ui.ignore(f':{iglo},{ighi}:')
-                                ui.group_snr(fit_grp)
-                                rstat= ui.get_fit_results().rstat
-                                errl, errh = None, None
-                                lerror() if verbose<2 else linfo()
-                                if rstat < 5:
-                                    if test:
-                                        print('\nLineE CONF...')
-                                    ui.conf(tika1.LineE);
-                                    tmp=ui.get_conf_results();
-                                    errl, errh = tmp.parmins[0], tmp.parmaxes[0]
-                                if rstat >= 5 or errl is None:
-                                    if test:
-                                        print('\nLineE COVAR...')
-                                    ui.covar(tika1.LineE)
-                                    errl=ui.get_covar_results().parmaxes[0]
-                                    if errl is not None:
-                                        errl, errh = -errl, errl
-                                if errl is None:
-                                    errl=-0.099
-                                if errh is None:
-                                    errh=-errl
-                                if errl > -0.001:
-                                    errl=-0.001
-                                if errh < 0.001:
-                                    errh=0.001
-                            except:
-                                ui.set_method('neldermead')
-                                errl, errh =-0.099, 0.099
-                        else:
-                            errl, errh = -0.099, 0.099
-                        tika1_elo, tika1_ehi = errl, errh
-                                    
-                        ui.freeze(src_mdl,bkg_mdl)
-                        ui.thaw(tikb)
-                        ui.freeze(tikb.width)
-
-                    else:
-                        iglo=tika1.LineE.val-0.4
-                        ighi=tika1.LineE.val+0.4
-                        (elo,ehi)= get_line_error(tika1.LineE, 5, iglo, ighi)
-                        tika1_elo= elo
-                        tika1_ehi=ehi
+                    iglo=tika1.LineE.val-0.4
+                    ighi=tika1.LineE.val+0.4
+                    (elo,ehi)= get_line_error(tika1.LineE, 5, iglo, ighi)
+                    tika1_elo= elo
+                    tika1_ehi=ehi
 
                     ## Tib errors
-                    if _5c1bdd5:
-                        if doerr==1:
-                            try:
-                                ui.set_method('levmar')
-                                lwarn()
-                                ui.notice()
-                                ui.ungroup()
-                                iglo=tikb.LineE.val-0.4
-                                ighi=tikb.LineE.val+0.4
-                                ui.ignore(f':{iglo},{ighi}:')
-                                ui.group_snr(fit_grp)
-                                rstat= ui.get_fit_results().rstat
-                                errl, errh = None, None
-                                lerror() if verbose<2 else linfo()
-                                if rstat < 5:
-                                    if test:
-                                        print('\nLineE CONF...')
-                                    ui.conf(tikb.LineE)
-                                    tmp=ui.get_conf_results()
-                                    errl, errh = tmp.parmins[0], tmp.parmaxes[0]
-                                if rstat >= 5 or errl is None:
-                                    if test:
-                                        print('\nLineE COVAR...')
-                                    ui.covar(tikb.LineE)
-                                    errl=ui.get_covar_results().parmaxes[0]
-                                    if errl is not None:
-                                        errl, errh = -errl, errl
-                                if errl is None:
-                                    errl=-0.099
-                                if errh is None:
-                                    errh=-errl
-                                if errl > -0.001:
-                                    errl=-0.001
-                                if errh < 0.001:
-                                    errh=0.001
-                            except:
-                                ui.set_method('neldermead')
-                                errl, errh = -0.099, 0.099
-                        else:
-                            errl, errh = -0.099, 0.099
-                        tikb_elo, tikb_ehi = errl, errh
-                        lwarn()
-                        ui.notice()
-                        ui.ungroup()
-                        ui.freeze(src_mdl,bkg_mdl)
-                    else:
-                        ui.freeze(src_mdl,bkg_mdl)
-                        ui.thaw(tikb)
-                        ui.freeze(tikb.width)
-                        iglo=tikb.LineE.val-0.4
-                        ighi=tikb.LineE.val+0.4
-                        (elo,ehi)= get_line_error(tikb.LineE, 5, iglo, ighi)
-                        tikb_elo, tikb_ehi = elo, ehi
+                    ui.freeze(src_mdl,bkg_mdl)
+                    ui.thaw(tikb)
+                    ui.freeze(tikb.width)
+                    iglo=tikb.LineE.val-0.4
+                    ighi=tikb.LineE.val+0.4
+                    (elo,ehi)= get_line_error(tikb.LineE, 5, iglo, ighi)
+                    tikb_elo, tikb_ehi = elo, ehi
                     prep_2()
                 else:
                     tika1_elo, tika1_ehi = -0.099, 0.099
@@ -780,11 +685,7 @@ def do_fit(args):
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(alka, alkb)
                     ui.freeze(alka.width)
-                    if _5c1bdd5:
-                        lwarn() if verbose<2 else linfo()
-                        ui.fit(1); lwarn()
-                    else:
-                        fit_1()
+                    fit_1()
 
                     ## Al errors
                     iglo=alka.LineE.val-0.4
@@ -809,11 +710,7 @@ def do_fit(args):
                     ig.si[1] = sika.LineE.val+0.2
                     prep_1(ig.si[0], ig.si[1])
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sika); ui.freeze(sika.width)
-                    if _5c1bdd5:
-                        lwarn() if verbose<2 else linfo()
-                        ui.fit(1); lwarn()
-                    else:
-                        fit_1()
+                    fit_1()
 
                     ## SiKa errors
                     # doerr=1
@@ -829,11 +726,7 @@ def do_fit(args):
                     ig.si[1] = sikb.LineE.val+0.2
                     prep_1(ig.si[0], ig.si[1])
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sikb); ui.freeze(sikb.width)
-                    if _5c1bdd5:
-                        lwarn() if verbose<2 else linfo()
-                        ui.fit(1); lwarn()
-                    else:
-                        fit_1()
+                    fit_1()
 
                     ## SiKb errors
                     if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
@@ -887,11 +780,7 @@ def do_fit(args):
                     ni_iglo, ni_ighi = nika.LineE.val-0.2, nika.LineE.val+0.2
                     prep_1(ni_iglo, ni_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(nika); ui.freeze(nika.width)
-                    if _5c1bdd5:
-                        lwarn() if verbose<2 else linfo()
-                        ui.fit(1); lwarn()
-                    else:
-                        fit_1()
+                    fit_1()
 
                     ## NiKa errors
                     if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
@@ -925,11 +814,7 @@ def do_fit(args):
                     aula_iglo, aula_ighi = aula.LineE.val-0.2, aula.LineE.val+0.2
                     prep_1(aula_iglo, aula_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aula.LineE)
-                    if _5c1bdd5:
-                        lwarn() if verbose<2 else linfo()
-                        ui.fit(1); lwarn()
-                    else:
-                        fit_1()
+                    fit_1()
 
                     ## Au-La errors
                     (elo,ehi)= get_line_error(aula.LineE, 2.5, aula_iglo, aula_ighi)
