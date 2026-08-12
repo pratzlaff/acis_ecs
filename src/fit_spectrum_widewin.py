@@ -576,7 +576,7 @@ def do_fit(args):
                         else:
                             return -0.099, 0.099
 
-                _5c1bdd5 = True
+                _5c1bdd5 = False
 
                 #################
                 if tofit.init:
