@@ -57,12 +57,9 @@ toperr=0  ## 1= turn on err only for 256x256y and yl=769, overrides all other se
 #xtrascl=3  ## 7= 70-210eV, 5= 50-150eV, 3= 30-90eV, 1= 10-30eV
 
 xcnt_thresh_min=2500  ## min counts to fit bkg widths, and run err on some bkg lines
-xcnt_thresh_max=100000  ## max counts to fit bkg widths, and run err on some bkg lines, too high == ECS overwhelms bkg
-cnt_thresh=200    ## min counts in the .pi spectrum, otherwise skip    
+cnt_thresh=100    ## min counts in the .pi spectrum, otherwise skip
 thresh=5e-5  ## norm theshold to run conf vs covar
 numcores=16
-
-cnt_thresh=100    ## min counts in the .pi spectrum, otherwise skip    
 
 ## don't edit below here ##
 import astropy.time
@@ -448,7 +445,7 @@ def do_fit(args):
                     ui.thaw(aulb)
 
                 ui.thaw(bkg_arr)
-                if tot_cnts<xcnt_thresh_min or tot_cnts>xcnt_thresh_max:
+                if tot_cnts<xcnt_thresh_min:
                     ui.freeze(auma.width, aumb.width, aula.width, aula_fs.width, aulb.width, nika.width, nikb.width)
                 lwarn() if verbose<2 else linfo()
                 ui.fit(10); lwarn(); ui.notice(); ui.ungroup(); ui.freeze(bkg_mdl)
@@ -714,7 +711,7 @@ def do_fit(args):
 
                     ## SiKa errors
                     # doerr=1
-                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                    if tot_cnts>xcnt_thresh_min:
                         iglo=sika.LineE.val-0.4
                         ighi=sika.LineE.val+0.4
                         (elo,ehi)= get_line_error(sika.LineE, 2.5, iglo, ighi)
@@ -729,7 +726,7 @@ def do_fit(args):
                     fit_1()
 
                     ## SiKb errors
-                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                    if tot_cnts>xcnt_thresh_min:
                         iglo=sikb.LineE.val-0.4; ighi=sikb.LineE.val+0.4
                         (elo,ehi)= get_line_error(sikb.LineE, 2.5, *ig.si)
                     else:
@@ -740,7 +737,7 @@ def do_fit(args):
                     sika_elo= -0.099; sika_ehi=0.099; sikb_elo= -0.099; sikb_ehi=0.099
                     
                 #################
-                if tofit.aum and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                if tofit.aum and tot_cnts>xcnt_thresh_min:
                     ##----------
                     ##untie Au-Mb
                     aumb.LineE= aumb.LineE.val
@@ -783,7 +780,7 @@ def do_fit(args):
                     fit_1()
 
                     ## NiKa errors
-                    if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                    if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min:
                         (elo,ehi)= get_line_error(nika.LineE, 2.5, ni_iglo, ni_ighi)
                     else:
                         elo=-0.099; ehi=0.099
@@ -799,7 +796,7 @@ def do_fit(args):
                     fit_1()
 
                     ## NiKb errors
-                    if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                    if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min:
                         (elo,ehi)= get_line_error(nikb.LineE, 2.5, ni_iglo, ni_ighi)
                     else:
                         elo=-0.099; ehi=0.099
@@ -834,7 +831,7 @@ def do_fit(args):
                     fit_1()
 
                     ## Au-La fs errors
-                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                    if tot_cnts>xcnt_thresh_min:
                         (elo,ehi)= get_line_error(aula_fs.LineE, 2.5, aula_fs_iglo, aula_fs_ighi)
                     else:
                         elo=-0.099; ehi=0.099
@@ -850,7 +847,7 @@ def do_fit(args):
                     fit_1()
 
                     ## Au-Lb errors
-                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                    if tot_cnts>xcnt_thresh_min:
                         (elo,ehi)= get_line_error(aulb.LineE, 2.5, aulb_iglo, aulb_ighi)
                     else:
                         elo=-0.099; ehi=0.099
