@@ -89,9 +89,12 @@ from matplotlib.ticker import ScalarFormatter
 from sherpa.astro import ui
 import logging
 logger= logging.getLogger('sherpa')
-def lerror(): logger.setLevel(logging.ERROR)
-def lwarn(): logger.setLevel(logging.WARN)
-def linfo(): logger.setLevel(logging.INFO)
+def lerror():
+    logger.setLevel(logging.ERROR)
+def lwarn():
+    logger.setLevel(logging.WARN)
+def linfo():
+    logger.setLevel(logging.INFO)
 
 pdir_tmp= mktempdir(dir='.')
 pdir= pdir_tmp.name
@@ -527,6 +530,54 @@ def do_fit(args):
                     ui.ignore(f':{iglo},{ighi}:')
                     ui.group_snr(fit_grp)
 
+                def prep_2():
+                    lwarn()
+                    ui.notice()
+                    ui.ungroup()
+                    ui.freeze(src_mdl,bkg_mdl)
+
+                def fit_1():
+                    lwarn() if verbose<2 else linfo()
+                    ui.set_method('neldermead')
+                    ui.fit(1)
+                    lwarn()
+
+                def get_line_error(par, rstat_limit, iglo, ighi):
+                    if doerr==1:
+                        prep_1(iglo, ighi)
+                        lerror() if verbose<2 else linfo()
+                        try:
+                            ui.set_method('levmar')
+                            rstat= ui.get_fit_results().rstat
+                            elo= ehi =None
+                            if rstat < rstat_limit:
+                                if test:
+                                    print('\nLineE CONF...')
+                                ui.conf(par)
+                                tmp=ui.get_conf_results()
+                                elo=tmp.parmins[0]
+                                ehi=tmp.parmaxes[0]
+                            if rstat >= rstat_limit or elo is None:
+                                if test:
+                                    print('\nLineE COVAR...')
+                                ui.covar(par)
+                                elo=ui.get_covar_results().parmaxes[0]
+                                if elo is not None:
+                                    ehi= elo; elo= -elo
+                            if elo is None:
+                                elo=-0.099
+                            if ehi is None:
+                                ehi=-elo
+                            elo= min(elo, -0.001)
+                            ehi= max(ehi, 0.001)
+                            return elo, ehi
+                        except:
+                            return -0.099, 0.099
+                        else:
+                            return -0.099, 0.099
+
+                _5c1bdd5 = True
+
                 #################
                 if tofit.init:
                     ## initial rough fit
@@ -542,10 +593,7 @@ def do_fit(args):
                     ui.freeze(sika.width, sikb.width, auma.width, aumb.width, nika.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1)
-                    lwarn()
-                    ui.notice()
-                    ui.ungroup()
-                    ui.freeze(src_mdl,bkg_mdl)
+                    prep_2()
 
                 #################
                 if tofit.mn:
@@ -562,104 +610,30 @@ def do_fit(args):
                     prep_1(ig.mn[0], ig.mn[1])
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(mnka1, mnka2, mnkb)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1)
-                    lwarn()
+                    fit_1()
 
                     ## Mna errors
-                    if doerr==1:
-                        ui.freeze(src_mdl,bkg_mdl)
-                        ui.thaw(mnka1, mnka2)
-                        try:
-                            ui.set_method('levmar')
-                            lwarn()
-                            ui.notice()
-                            ui.ungroup()
-                            iglo=mnka1.LineE.val-0.8
-                            ighi=mnka1.LineE.val+1.2
-                            ui.ignore(f':{iglo},{ighi}:')
-                            ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat
-                            errl, errh = None, None
-                            lerror() if verbose<2 else linfo()
-                            if rstat < 5:
-                                if test:
-                                    print('\nLineE CONF...')
-                                ui.conf(mnka1.LineE)
-                                tmp=ui.get_conf_results()
-                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
-
-                            if rstat >= 5 or errl is None:
-                                if test:
-                                    print('\nLineE COVAR...')
-                                ui.covar(mnka1.LineE)
-                                errl=ui.get_covar_results().parmaxes[0]
-                                if errl is not None:
-                                    errl, errh = -errl, errl
-                            if errl is None:
-                                errl=-0.099
-                            if errh is None:
-                                errh=-errl
-                            if errl > -0.001: errl=-0.001
-                            if errh < 0.001: errh=0.001
-                        except:
-                            ui.set_method('neldermead')
-                            errl, errh = -0.099, 0.099
-                    else:
-                        errl, errh = -0.099, 0.099
-                    if errh==0.099:
+                    ui.freeze(src_mdl,bkg_mdl)
+                    ui.thaw(mnka1, mnka2)
+                    iglo=mnka1.LineE.val-0.8
+                    ighi=mnka1.LineE.val+1.2
+                    (elo,ehi)= get_line_error(mnka1.LineE, 5, iglo, ighi)
+                    if ehi==0.099:
                         doerr=0  ## turn off err if Mn is bad
-                    mnka1_elo, mnka1_ehi = errl, errh
+                    mnka1_elo= elo
+                    mnka1_ehi= ehi
 
                     ## Mnb errors
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(mnkb)
                     lwarn()
                     ## Mnb errors
-                    if doerr==1:
-                        try:
-                            ui.set_method('levmar')
-                            lwarn()
-                            ui.notice()
-                            ui.ungroup()
-                            iglo=mnkb.LineE.val-1.2;
-                            ighi=mnkb.LineE.val+0.5;
-                            ui.ignore(f':{iglo},{ighi}:')
-                            ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat
-                            errl, errh = None, None
-                            lerror() if verbose<2 else linfo()
-                            if rstat < 5:
-                                if test:
-                                    print('\nLineE CONF...')
-                                ui.conf(mnkb.LineE)
-                                tmp=ui.get_conf_results()
-                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
-                            if rstat >= 5 or errl is None:
-                                if test:
-                                    print('\nLineE COVAR...')
-                                ui.covar(mnkb.LineE)
-                                errl=ui.get_covar_results().parmaxes[0]
-                                if errl is not None:
-                                    errl, errh = -errl, errl
-                            if errl is None:
-                                errl=-0.099
-                            if errh is None:
-                                errh=-errl
-                            if errl > -0.001:
-                                errl=-0.001
-                            if errh < 0.001:
-                                errh=0.001
-                        except:
-                            ui.set_method('neldermead')
-                            errl, errh = -0.099, 0.099
-                    else:
-                        errl, errh = -0.099, 0.099
-                    mnkb_elo, mnkb_ehi = errl, errh
-                    lwarn()
-                    ui.notice()
-                    ui.ungroup()
-                    ui.freeze(src_mdl,bkg_mdl)
+                    iglo=mnkb.LineE.val-1.2
+                    ighi=mnkb.LineE.val+0.5
+                    (elo,ehi)= get_line_error(mnkb.LineE, 5, iglo, ighi)
+                    mnkb_elo= elo
+                    mnkb_ehi= ehi
+                    prep_2()
                 else:
                     mnka1_elo, mnka1_ehi = -0.099, 0.099
                     mnkb_elo, mnkb_ehi = -0.099, 0.099
@@ -683,101 +657,118 @@ def do_fit(args):
                     lwarn()
                     
                     ## Tia errors
-                    if doerr==1:
-                        try:
-                            ui.set_method('levmar')
-                            lwarn()
-                            ui.notice()
-                            ui.ungroup()
-                            iglo=tika1.LineE.val-0.4
-                            ighi=tika1.LineE.val+0.4
-                            ui.ignore(f':{iglo},{ighi}:')
-                            ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat
-                            errl, errh = None, None
-                            lerror() if verbose<2 else linfo()
-                            if rstat < 5:
-                                if test:
-                                    print('\nLineE CONF...')
-                                ui.conf(tika1.LineE);
-                                tmp=ui.get_conf_results();
-                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
-                            if rstat >= 5 or errl is None:
-                                if test:
-                                    print('\nLineE COVAR...')
-                                ui.covar(tika1.LineE)
-                                errl=ui.get_covar_results().parmaxes[0]
-                                if errl is not None:
-                                    errl, errh = -errl, errl
-                            if errl is None:
-                                errl=-0.099
-                            if errh is None:
-                                errh=-errl
-                            if errl > -0.001:
-                                errl=-0.001
-                            if errh < 0.001:
-                                errh=0.001
-                        except:
-                            ui.set_method('neldermead')
-                            errl, errh =-0.099, 0.099
-                    else:
-                        errl, errh = -0.099, 0.099
-                    tika1_elo, tika1_ehi = errl, errh
+                    if _5c1bdd5:
+                        if doerr==1:
+                            try:
+                                ui.set_method('levmar')
+                                lwarn()
+                                ui.notice()
+                                ui.ungroup()
+                                iglo=tika1.LineE.val-0.4
+                                ighi=tika1.LineE.val+0.4
+                                ui.ignore(f':{iglo},{ighi}:')
+                                ui.group_snr(fit_grp)
+                                rstat= ui.get_fit_results().rstat
+                                errl, errh = None, None
+                                lerror() if verbose<2 else linfo()
+                                if rstat < 5:
+                                    if test:
+                                        print('\nLineE CONF...')
+                                    ui.conf(tika1.LineE);
+                                    tmp=ui.get_conf_results();
+                                    errl, errh = tmp.parmins[0], tmp.parmaxes[0]
+                                if rstat >= 5 or errl is None:
+                                    if test:
+                                        print('\nLineE COVAR...')
+                                    ui.covar(tika1.LineE)
+                                    errl=ui.get_covar_results().parmaxes[0]
+                                    if errl is not None:
+                                        errl, errh = -errl, errl
+                                if errl is None:
+                                    errl=-0.099
+                                if errh is None:
+                                    errh=-errl
+                                if errl > -0.001:
+                                    errl=-0.001
+                                if errh < 0.001:
+                                    errh=0.001
+                            except:
+                                ui.set_method('neldermead')
+                                errl, errh =-0.099, 0.099
+                        else:
+                            errl, errh = -0.099, 0.099
+                        tika1_elo, tika1_ehi = errl, errh
                                     
-                    ui.freeze(src_mdl,bkg_mdl)
-                    ui.thaw(tikb)
-                    ui.freeze(tikb.width)
+                        ui.freeze(src_mdl,bkg_mdl)
+                        ui.thaw(tikb)
+                        ui.freeze(tikb.width)
+
+                    else:
+                        iglo=tika1.LineE.val-0.4
+                        ighi=tika1.LineE.val+0.4
+                        (elo,ehi)= get_line_error(tika1.LineE, 5, iglo, ighi)
+                        tika1_elo= elo
+                        tika1_ehi=ehi
 
                     ## Tib errors
-                    if doerr==1:
-                        try:
-                            ui.set_method('levmar')
-                            lwarn()
-                            ui.notice()
-                            ui.ungroup()
-                            iglo=tikb.LineE.val-0.4
-                            ighi=tikb.LineE.val+0.4
-                            ui.ignore(f':{iglo},{ighi}:')
-                            ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat
-                            errl, errh = None, None
-                            lerror() if verbose<2 else linfo()
-                            if rstat < 5:
-                                if test:
-                                    print('\nLineE CONF...')
-                                ui.conf(tikb.LineE)
-                                tmp=ui.get_conf_results()
-                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
-                            if rstat >= 5 or errl is None:
-                                if test:
-                                    print('\nLineE COVAR...')
-                                ui.covar(tikb.LineE)
-                                errl=ui.get_covar_results().parmaxes[0]
-                                if errl is not None:
-                                    errl, errh = -errl, errl
-                            if errl is None:
-                                errl=-0.099
-                            if errh is None:
-                                errh=-errl
-                            if errl > -0.001:
-                                errl=-0.001
-                            if errh < 0.001:
-                                errh=0.001
-                        except:
-                            ui.set_method('neldermead')
+                    if _5c1bdd5:
+                        if doerr==1:
+                            try:
+                                ui.set_method('levmar')
+                                lwarn()
+                                ui.notice()
+                                ui.ungroup()
+                                iglo=tikb.LineE.val-0.4
+                                ighi=tikb.LineE.val+0.4
+                                ui.ignore(f':{iglo},{ighi}:')
+                                ui.group_snr(fit_grp)
+                                rstat= ui.get_fit_results().rstat
+                                errl, errh = None, None
+                                lerror() if verbose<2 else linfo()
+                                if rstat < 5:
+                                    if test:
+                                        print('\nLineE CONF...')
+                                    ui.conf(tikb.LineE)
+                                    tmp=ui.get_conf_results()
+                                    errl, errh = tmp.parmins[0], tmp.parmaxes[0]
+                                if rstat >= 5 or errl is None:
+                                    if test:
+                                        print('\nLineE COVAR...')
+                                    ui.covar(tikb.LineE)
+                                    errl=ui.get_covar_results().parmaxes[0]
+                                    if errl is not None:
+                                        errl, errh = -errl, errl
+                                if errl is None:
+                                    errl=-0.099
+                                if errh is None:
+                                    errh=-errl
+                                if errl > -0.001:
+                                    errl=-0.001
+                                if errh < 0.001:
+                                    errh=0.001
+                            except:
+                                ui.set_method('neldermead')
+                                errl, errh = -0.099, 0.099
+                        else:
                             errl, errh = -0.099, 0.099
+                        tikb_elo, tikb_ehi = errl, errh
+                        lwarn()
+                        ui.notice()
+                        ui.ungroup()
+                        ui.freeze(src_mdl,bkg_mdl)
                     else:
-                        errl, errh = -0.099, 0.099
-                    tikb_elo, tikb_ehi = errl, errh
-                    lwarn()
-                    ui.notice()
-                    ui.ungroup()
-                    ui.freeze(src_mdl,bkg_mdl)
+                        ui.freeze(src_mdl,bkg_mdl)
+                        ui.thaw(tikb)
+                        ui.freeze(tikb.width)
+                        iglo=tikb.LineE.val-0.4
+                        ighi=tikb.LineE.val+0.4
+                        (elo,ehi)= get_line_error(tikb.LineE, 5, iglo, ighi)
+                        tikb_elo, tikb_ehi = elo, ehi
+                    prep_2()
                 else:
                     tika1_elo, tika1_ehi = -0.099, 0.099
                     tikb_elo, tikb_ehi = -0.099, 0.099
 
-                
                 #################
                 if tofit.al:
                     ##----------
@@ -789,54 +780,21 @@ def do_fit(args):
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(alka, alkb)
                     ui.freeze(alka.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
-                    ## Al errors
-                    if doerr==1:
-                        try:
-                            ui.set_method('levmar')
-                            iglo=alka.LineE.val-0.4
-                            ighi=alka.LineE.val+0.4
-                            ign=':{},{}:'.format(iglo,ighi)
-                            lwarn()
-                            ui.notice()
-                            ui.ungroup()
-                            ui.ignore(ign)
-                            ui.group_snr(fit_grp)
-                            rstat= ui.get_fit_results().rstat
-                            errl, errh = None, None
-                            lerror() if verbose<2 else linfo()
-                            if rstat < 5:
-                                if test:
-                                    print('\nLineE CONF...')
-                                ui.conf(alka.LineE)
-                                tmp=ui.get_conf_results()
-                                errl, errh = tmp.parmins[0], tmp.parmaxes[0]
-                            if rstat >= 5 or errl is None:
-                                if test:
-                                    print('\nLineE COVAR...')
-                                ui.covar(alka.LineE)
-                                errl=ui.get_covar_results().parmaxes[0]
-                                if errl is not None:
-                                    errl, errh =-errl, errl
-                            if errl is None:
-                                errl=-0.099
-                            if errh is None:
-                                errh=-errl
-                            if errl > -0.001:
-                                errl=-0.001
-                            if errh < 0.001:
-                                errh=0.001
-                        except:
-                            ui.set_method('neldermead')
-                            errl, errh = -0.099, 0.099
+                    if _5c1bdd5:
+                        lwarn() if verbose<2 else linfo()
+                        ui.fit(1); lwarn()
                     else:
-                        errl, errh = -0.099, 0.099
-                    alka_elo, alka_ehi = errl, errh
+                        fit_1()
+
+                    ## Al errors
+                    iglo=alka.LineE.val-0.4
+                    ighi=alka.LineE.val+0.4
+                    (elo,ehi)= get_line_error(alka.LineE, 5, iglo, ighi)
+                    alka_elo= elo
+                    alka_ehi=ehi
                 else:
                     alka_elo, alka_ehi = -0.099, 0.099
 
-                    
                 ## SiK fits                    
                 if tofit.si:
                     val= alka.LineE.val +sika_nom-alka_nom; ui.set_par(sika.LineE, val, min= val-0.04, max= val+0.04)
@@ -851,62 +809,40 @@ def do_fit(args):
                     ig.si[1] = sika.LineE.val+0.2
                     prep_1(ig.si[0], ig.si[1])
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sika); ui.freeze(sika.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
-                    ## SiKa errors
-                    doerr=1
-                    if doerr==1 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
-                        iglo=sika.LineE.val-0.4; ighi=sika.LineE.val+0.4; ign=':{},{}:'.format(iglo,ighi)
-                        lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        lerror() if verbose<2 else linfo()
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(sika.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(sika.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    if _5c1bdd5:
+                        lwarn() if verbose<2 else linfo()
+                        ui.fit(1); lwarn()
                     else:
-                        errl=-0.099; errh=0.099
-                    sika_elo= errl; sika_ehi=errh
+                        fit_1()
+
+                    ## SiKa errors
+                    # doerr=1
+                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                        iglo=sika.LineE.val-0.4
+                        ighi=sika.LineE.val+0.4
+                        (elo,ehi)= get_line_error(sika.LineE, 2.5, iglo, ighi)
+                    else:
+                        elo=-0.099; ehi=0.099
+                    sika_elo= elo; sika_ehi=ehi
 
                     ig.si[0] = sikb.LineE.val-0.2
                     ig.si[1] = sikb.LineE.val+0.2
                     prep_1(ig.si[0], ig.si[1])
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(sikb); ui.freeze(sikb.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
-                    ## SiKb errors
-                    if doerr==1 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
-                        ui.set_method('levmar')
-                        iglo=sikb.LineE.val-0.4; ighi=sikb.LineE.val+0.4; ign=':{},{}:'.format(iglo,ighi)
-                        lwarn(); ui.notice(); ui.ungroup(); ui.ignore(ign); ui.group_snr(fit_grp)
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        lerror() if verbose<2 else linfo()
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(sikb.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(sikb.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    if _5c1bdd5:
+                        lwarn() if verbose<2 else linfo()
+                        ui.fit(1); lwarn()
                     else:
-                        errl=-0.099; errh=0.099
-                    sikb_elo= errl; sikb_ehi=errh
-                    lwarn(); ui.notice(); ui.ungroup(); ui.freeze(src_mdl,bkg_mdl)
+                        fit_1()
+
+                    ## SiKb errors
+                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                        iglo=sikb.LineE.val-0.4; ighi=sikb.LineE.val+0.4
+                        (elo,ehi)= get_line_error(sikb.LineE, 2.5, *ig.si)
+                    else:
+                        elo=-0.099; ehi=0.099
+                    sikb_elo= elo; sikb_ehi=ehi
+                    prep_2()
                 else:
                     sika_elo= -0.099; sika_ehi=0.099; sikb_elo= -0.099; sikb_ehi=0.099
                     
@@ -920,64 +856,30 @@ def do_fit(args):
                     aum_iglo, aum_ighi= 1.9, 2.7
                     prep_1(aum_iglo, aum_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(auma); ui.freeze(auma.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
-                    ## Ni errors
-                    if doerr==1 and alka_ehi!=0.099:
-                        ui.set_method('levmar')
-                        lerror() if verbose<2 else linfo()
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(auma.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(auma.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    fit_1()
+
+                    ## Au-Ma errors
+                    if alka_ehi!=0.099:
+                        (elo,ehi)= get_line_error(auma.LineE, 2.5, aum_iglo, aum_ighi)
                     else:
-                        errl=-0.099; errh=0.099
-                    auma_elo= errl; auma_ehi=errh                  
+                        elo=-0.099; ehi=0.099
+                    auma_elo= elo; auma_ehi=ehi
 
                     ## Au-Mb
                     val= aumb.LineE.val; ui.set_par(aumb.LineE, val, min=val-0.04, max= val+0.1)
                     aum_iglo, aum_ighi= 1.9, 2.7
                     prep_1(aum_iglo, aum_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aumb); ui.freeze(aumb.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
+                    fit_1()
                     ## Au-Mb errors
-                    if doerr==1 and alka_ehi!=0.099:
-                        ui.set_method('levmar')
-                        lerror() if verbose<2 else linfo()
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(aumb.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(aumb.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    if alka_ehi!=0.099:
+                        (elo,ehi)= get_line_error(aumb.LineE, 2.5, aum_iglo, aum_ighi)
                     else:
-                        errl=-0.099; errh=0.099
-                    aumb_elo= errl; aumb_ehi=errh
-                    lwarn(); ui.notice(); ui.ungroup(); ui.freeze(src_mdl,bkg_mdl)
+                        elo=-0.099; ehi=0.099
+                    aumb_elo= elo; aumb_ehi=ehi
+                    prep_2()
                 else:
                     auma_elo= -0.099; auma_ehi=0.099; aumb_elo= -0.099; aumb_ehi=0.099                    
-
-
-                    
                 #################
                 if tofit.nika:
                     ##----------
@@ -985,29 +887,18 @@ def do_fit(args):
                     ni_iglo, ni_ighi = nika.LineE.val-0.2, nika.LineE.val+0.2
                     prep_1(ni_iglo, ni_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(nika); ui.freeze(nika.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
-                    ## NiKa errors
-                    if doerr==1 and alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
-                        ui.set_method('levmar')
-                        lerror() if verbose<2 else linfo()
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(nika.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(nika.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    if _5c1bdd5:
+                        lwarn() if verbose<2 else linfo()
+                        ui.fit(1); lwarn()
                     else:
-                        errl=-0.099; errh=0.099
-                    nika_elo= errl; nika_ehi=errh
+                        fit_1()
+
+                    ## NiKa errors
+                    if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                        (elo,ehi)= get_line_error(nika.LineE, 2.5, ni_iglo, ni_ighi)
+                    else:
+                        elo=-0.099; ehi=0.099
+                    nika_elo= elo; nika_ehi=ehi
                 else:
                     nika_elo= -0.099; nika_ehi=0.099
 
@@ -1016,34 +907,17 @@ def do_fit(args):
                     ni_iglo, ni_ighi = nikb.LineE.val-0.2, nikb.LineE.val+0.2
                     prep_1(ni_iglo, ni_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(nikb); ui.freeze(nikb.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
+                    fit_1()
+
                     ## NiKb errors
-                    if doerr==1 and alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
-                        ui.set_method('levmar')
-                        lerror() if verbose<2 else linfo()
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(nikb.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(nikb.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                        (elo,ehi)= get_line_error(nikb.LineE, 2.5, ni_iglo, ni_ighi)
                     else:
-                        errl=-0.099; errh=0.099
-                    nikb_elo= errl; nikb_ehi=errh
-                    lwarn(); ui.notice(); ui.ungroup(); ui.freeze(src_mdl,bkg_mdl)
+                        elo=-0.099; ehi=0.099
+                    nikb_elo= elo; nikb_ehi=ehi
+                    prep_2()
                 else:
                     nikb_elo= -0.099; nikb_ehi=0.099      
-
-
 
                 #################                    
                 if tofit.aula:
@@ -1051,29 +925,15 @@ def do_fit(args):
                     aula_iglo, aula_ighi = aula.LineE.val-0.2, aula.LineE.val+0.2
                     prep_1(aula_iglo, aula_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aula.LineE)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
-                     ## Au-La errors
-                    if doerr==1:
-                        ui.set_method('levmar')
-                        lerror() if verbose<2 else linfo()
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(aula.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        if rstat >= 2.5 or errl is None:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(aula.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    if _5c1bdd5:
+                        lwarn() if verbose<2 else linfo()
+                        ui.fit(1); lwarn()
                     else:
-                        errl=-0.099; errh=0.099
-                    aula_elo= errl; aula_ehi=errh                  
+                        fit_1()
+
+                    ## Au-La errors
+                    (elo,ehi)= get_line_error(aula.LineE, 2.5, aula_iglo, aula_ighi)
+                    aula_elo= elo; aula_ehi=ehi
                 else:
                     aula_elo= -0.099; aula_ehi=0.099
 
@@ -1086,66 +946,33 @@ def do_fit(args):
                     aula_fs_iglo, aula_fs_ighi = aula_fs.LineE.val-0.4, aula_fs.LineE.val+0.4
                     prep_1(aula_fs_iglo, aula_fs_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aula_fs); ui.freeze(aula_fs.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
-                     ## Au-La fs errors
-                    if doerr==1 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
-                        ui.set_method('levmar')
-                        lerror() if verbose<2 else linfo()
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(aula_fs.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(aula_fs.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    fit_1()
+
+                    ## Au-La fs errors
+                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                        (elo,ehi)= get_line_error(aula_fs.LineE, 2.5, aula_fs_iglo, aula_fs_ighi)
                     else:
-                        errl=-0.099; errh=0.099
-                    aula_fs_elo= errl; aula_fs_ehi=errh
+                        elo=-0.099; ehi=0.099
+                    aula_fs_elo= elo; aula_fs_ehi=ehi
                 else:
                     aula_fs_elo= -0.099; aula_fs_ehi=0.099
-
 
                 ## Au-Lb+Lb +- fwhm                    
                 if tofit.aulb:
                     aulb_iglo, aulb_ighi = aulb.LineE.val-0.3, aulb.LineE.val+0.3
                     prep_1(aulb_iglo, aulb_ighi)
                     ui.freeze(src_mdl,bkg_mdl); ui.thaw(aulb); ui.freeze(aulb.width)
-                    lwarn() if verbose<2 else linfo()
-                    ui.fit(1); lwarn()
+                    fit_1()
+
                     ## Au-Lb errors
-                    if doerr==1 and tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
-                        ui.set_method('levmar')
-                        lerror() if verbose<2 else linfo()
-                        rstat= ui.get_fit_results().rstat; errl=None; errh=None
-                        if rstat < 2.5:
-                            if test: print('\nLineE CONF...')
-                            ui.conf(aulb.LineE); tmp=ui.get_conf_results(); errl=tmp.parmins[0]; errh=tmp.parmaxes[0]
-                        else:
-                            if test: print('\nLineE COVAR...')
-                            ui.covar(aulb.LineE); errl=ui.get_covar_results().parmaxes[0]
-                            if errl is not None:
-                                errl=-errl; errh=-errl
-                        if errl is None: errl=-0.099
-                        if errh is None: errh=-errl
-                        if errl > -0.001: errl=-0.001
-                        if errh < 0.001: errh=0.001
-                        ui.set_method('neldermead')
+                    if tot_cnts>xcnt_thresh_min and tot_cnts<xcnt_thresh_max:
+                        (elo,ehi)= get_line_error(aulb.LineE, 2.5, aulb_iglo, aulb_ighi)
                     else:
-                        errl=-0.099; errh=0.099
-                    aulb_elo= errl; aulb_ehi=errh
-                    lwarn(); ui.notice(); ui.ungroup(); ui.freeze(src_mdl,bkg_mdl)
+                        elo=-0.099; ehi=0.099
+                    aulb_elo= elo; aulb_ehi= ehi
+                    prep_2()
                 else:
                     aulb_elo= -0.099; aulb_ehi=0.099      
-
-
                     
                 #################
                 #plt_me()
@@ -1218,9 +1045,9 @@ def do_fit(args):
 
                     Named3 = namedtuple('Named3', 'ecs bkg pha')
 
-                    fnames = Named3(ecs=f'{fit_dir}/{ccd}_ecs.txt',
-                                    bkg=f'{fit_dir}/{ccd}_bkg.txt',
-                                    pha=f'{fit_dir}/{ccd}_pha.txt')
+                    fnames = Named3(ecs=f'{fit_dir}/{ccd}_ecs3.txt',
+                                    bkg=f'{fit_dir}/{ccd}_bkg3.txt',
+                                    pha=f'{fit_dir}/{ccd}_pha3.txt')
 
                     # ## open output fitpars txt
                     fhs = Named3(ecs=open(fnames.ecs, 'w'),
