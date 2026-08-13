@@ -60,6 +60,8 @@ xcnt_thresh_min=2500  ## min counts to fit bkg widths, and run err on some bkg l
 cnt_thresh=100    ## min counts in the .pi spectrum, otherwise skip
 thresh=5e-5  ## norm theshold to run conf vs covar
 numcores=16
+nofit=False
+dofitgrp=False
 
 ## don't edit below here ##
 import astropy.time
@@ -168,15 +170,7 @@ def do_fit(args):
     enum = args.epoch
     e = f'{args.epoch:03d}'
 
-    bin = int(f'{xbin}{ybin}')
-
-    bscl= 1/(256/xbin) * (256/ybin)
-
-    if xbin<32:
-        bscl=2e-2*bscl
-    bkg_lines_scl= 1
-    if xbin<32:
-        bkg_lines_scl=1e-3
+    bkg_lines_scl = 0.7* (xbin/256) * (ybin/256)
 
     ccd_list=['i0','i1','i2','i3','s0','s1','s2','s3','s4','s5']
 
@@ -243,7 +237,6 @@ def do_fit(args):
                 ui.set_conf_opt('fast',True)
                 ui.set_conf_opt('numcores',numcores)
                 ui.set_conf_opt('max_rstat',1e6)
-                ##ui.set_stat('cstat')  ## cstat too aggressive to include low count wings
 
                 ui.load_pha(pif)
 
@@ -252,15 +245,16 @@ def do_fit(args):
                 date= ui.get_data().header['DATE-OBS']
                 dyear = astropy.time.Time(date).to_value('decimalyear')
 
-                if xbin<32: ## use 32x128 resolution responses
-                    rsp_xbin=32; rsp_ybin=128
+                ## use either default response dir bins, or round to 32x128y
+                if (xbin==256 and ybin==256) or (xbin==32 and ybin==128) or (xbin==64 and ybin==256):
+                    rsp_xbin=xbin; rsp_xl= xl
+                    rsp_ybin=ybin; rsp_yl= yl
+                else:
                     rsp_xl= 1+int(32 * round(float(xl)/32))
                     rsp_yl= 1+int(128 * round(float(yl)/128))
+                    rsp_xbin = 32; rsp_ybin = 128
                     if rsp_xl==1025: rsp_xl= 993
                     if rsp_yl==1025: rsp_yl= 897
-                else:
-                    rsp_xbin=xbin; rsp_ybin=ybin
-                    rsp_xl= xl; rsp_yl= yl
 
                 tmin = np.array([int(t) for t in tstr.split('-')]).max()
                 rmf = get_rmffile(ccd, tmin, rsp_xl, rsp_yl, rsp_xbin, rsp_ybin)
@@ -273,20 +267,26 @@ def do_fit(args):
                 lwarn()
                 ui.ignore('8.0:')
                 tot_cnts=sum(ui.get_counts(filter=1))  ## get_counts MUST be w/out snr grouping!
-                print(f'\n\n{e}\t{sfpt}C\t{ccd}\t{xl}xl\t{yl}yl\t{bin}xy\ttot_cnts= {tot_cnts}')
+                print(f'\n\n{e}\t{sfpt}C\t{ccd}\t{xl}xl\t{yl}yl\t{xbin}x{ybin}y\ttot_cnts= {tot_cnts}')
                 ui.notice()
                 lwarn() if verbose<2 else linfo()
 
-            ## turn on/off fit blocks, debugging/low-counts/BI
-            fields = 'init mn ti al si aum nika nikb aula aufs aulb'.split(' ')
-            ToFit = namedtuple('ToFit', fields, defaults=(True,)*len(fields))
+                stat= 'cstat' if tot_cnts<10000 else 'chi2gehrels'
+                ui.set_stat(stat)
 
-            if tot_cnts<800 or ccd=='s1' or ccd=='s1_noCTI' or ccd=='s3' or ccd=='s3_noCTI':
+            ## turn on/off fit blocks, debugging/low-counts/BI
+            fields = 'init_mn init_bkg init mn ti al si aum nika nikb aula aufs aulb'.split(' ')
+            ToFit = namedtuple('ToFit', fields, defaults=(True,)*len(fields))
+            if nofit:
+                tofit = namedtuple('ToFit', fields, defaults=(True,)*len(fields))()
+            elif tot_cnts<800 or ccd=='s1' or ccd=='s1_noCTI' or ccd=='s3' or ccd=='s3_noCTI':
                 tofit = ToFit(aum=False, nikb=False, aufs=False)
             elif xbin<32:
-                tofit = ToFit(si=False, aum=False, nika=False, nikb=False, aula=False, aufs=False, aulb=False)
+                tofit = ToFit(aum=False, nika=False, nikb=False, aula=False, aufs=False, aulb=False)
             else:
                 tofit = ToFit()
+
+            doerr=1    ## reset this each run, gets switched if Mn is a bad fit
 
             if tot_cnts>cnt_thresh:
 
@@ -295,47 +295,42 @@ def do_fit(args):
                 if tot_cnts<200:
                     fit_grp=1
 
-                ## run conf errors switches
-                doerr=0  ## reset each run
-                if test==0:
-                    if (ccd=='i3') or (ccd=='s3'): doerr=1
-                    if noerr==1: doerr=0
-                if testerr==1: doerr=1
-                if bin==256256 and yl==769 and toperr==1: doerr=1
-                if allerr: doerr=1
+                if tot_cnts>4000: plt_grp=3
+                if tot_cnts>8000: plt_grp=4
 
                 ##################
-                ## apprx scaling for initial line norms
+                ## apprx scaling for initial Mn norm
                 l= np.log(2)/2.737
                 nscl= np.exp(-l*(2.737*enum/10.948))
 
-                ## kicks in if xtrascl != 0
-                #xshift= -(yl*2e-5*xtrascl + 0.01*xtrascl)
-
-                
-                ##################
-                # initital Mn-Ka fit:
+                # initial Mn-Ka fit:
                 #   to find initial gain shift -- to set search windows
                 #   to get mna fwhm -- for narrow fit windows
                 lwarn()
                 pl= ui.xspowerlaw.pl
+                pl.norm = 1e-2 * (xbin/256) * (ybin/256)
                 mnag = ui.xsgaussian.mnag; mnag_nom= 5.8988
                 ui.set_par(mnag.LineE, mnag_nom, min= mnag_nom-0.25, max= mnag_nom+0.1)
                 ui.set_par(mnag.sigma, 0.001, min= 0.001, max= 0.1)                
-                mnag.norm= bscl*2.5*nscl
+                mnag.norm= 4*nscl * (xbin/256) * (ybin/256)      ## 3.5 because it is only 1x gaus rather than 3x
                 mnbg = ui.xsgaussian.mnbg; mnbg_nom= 6.490
                 mnbg.LineE= mnag.LineE + mnbg_nom-mnag_nom; mnbg.sigma= 0.001; mnbg.norm= mnag.norm*0.14
                 rsp= ui.get_response(1); tst_mdl= rsp(mnag+mnbg+pl)
                 ui.set_full_model(1, tst_mdl); ui.freeze(tst_mdl)
                 ui.thaw(mnag,pl)
-                ui.group_snr(1,fit_grp); ui.ignore(':5.5,7:')
+                if dofitgrp: ui.group_snr(1,fit_grp)
+                ui.ignore(':5.5,7:')
                 lwarn() if verbose<2 else linfo()
-                ui.fit(1); lwarn(); ui.notice(); ui.ungroup()
+                if tofit.init_mn: ui.fit(1)
+                lwarn(); ui.notice(); ui.ungroup()
                 ig_shift= mnag.LineE.val-mnag_nom
                 ## FWHM of Mna
                 tmp= ui.get_model_component_plot(mnag)
                 mdlx=tmp.xlo; mdly= tmp.y; idx,= np.where(mdly>0.5*max(mdly))
                 mna_fwhm= mdlx[idx[-1]] - mdlx[idx[0]]
+                ## set scaling factor for model ECS lines
+                bscl= mnag.norm.val/4
+
                 ## debug plot
                 show_mn_test= 0
                 if show_mn_test:
@@ -347,6 +342,8 @@ def do_fit(args):
                     ax.plot(mdlx, mdly, '-', c='orange', lw=1)
                     ax.set_yscale('log'); ax.set_xscale('log')
                     ax.set_xlim([4,9]); plt.show()
+
+                    ui.notice(); ui.ungroup()
 
                 ##################                
                 ## inst bkg model
@@ -367,41 +364,43 @@ def do_fit(args):
                 bgf =f'{datadir}/acis_bkg/s04_final_models_nolines/{bccd}_{byear}_{byl}-{byl+ybin-1}y.dat'
                 #sys.stderr.write(bgf+'\n')
                 ui.load_table_model('bkg_arr',bgf)
+                val= 0.3*bkg_lines_scl; ui.set_par(bkg_arr.ampl, val, min=0.1*val)
                 unit_arf = ui.get_arf(10)
                 unit_arf.specresp = np.ones_like(unit_arf.specresp)
                 rsp_bkg = ui.get_response(10)
 
                 ## BKG lines
-                ui.xslorentz.sika;
+                ui.xslorentz.sika
                 set_line('sika')
-                sika.norm.val *= bkg_lines_scl
+                sika.norm = bkg_lines_scl*9e-5
 
                 ui.xslorentz.sikb;
                 set_line('sikb')
-                sikb.norm.val *= bkg_lines_scl
+                sikb.LineE= sika.LineE + (sikb_nom-sika_nom); sikb.Width= sika.Width
+                sikb.norm = (3/9) * sika.norm   ## 3/9?? or 5/8??
 
                 ##
-                ui.xslorentz.auma;
+                ui.xslorentz.auma
                 set_line('auma')
-                auma.norm.val *= bkg_lines_scl
+                auma.norm = bkg_lines_scl*5e-4
 
-                ui.xslorentz.aumb;
+                ui.xslorentz.aumb
                 set_line('aumb')
-                aumb.norm.val *= bkg_lines_scl
+                aumb.norm = bkg_lines_scl*2e-4
 
                 ##
-                ui.xslorentz.nika;
+                ui.xslorentz.nika
                 set_line('nika', shift=ig_shift)
-                nika.norm.val *= bkg_lines_scl
+                nika.norm = bkg_lines_scl*8e-4
 
-                ui.xslorentz.nikb;
+                ui.xslorentz.nikb
                 set_line('nikb', shift=ig_shift)
-                nikb.norm.val *= bkg_lines_scl
+                nikb.norm = bkg_lines_scl*4e-4
 
                 ##
-                ui.xslorentz.aula;
+                ui.xslorentz.aula
                 set_line('aula', shift=1.2*ig_shift)
-                aula.norm.val *= bkg_lines_scl
+                aula.norm = bkg_lines_scl*2e-3
 
                 ##
                 ui.xslorentz.aula_fs
@@ -414,9 +413,9 @@ def do_fit(args):
                 aula_fs.norm= aula.norm*0.3
 
                 ##
-                ui.xslorentz.aulb;
+                ui.xslorentz.aulb
                 set_line('aulb', shift=1.3*ig_shift)
-                aulb.norm.val *= bkg_lines_scl
+                aulb.norm = bkg_lines_scl*2e-3
 
                 bkg_mdl=rsp_bkg(bkg_arr+ sika+ sikb+ auma+ aumb+ nika +nikb +aula +aula_fs +aulb)
                 ## fit bkg scaling
@@ -425,10 +424,8 @@ def do_fit(args):
                 ## Fit BKGND - above 8keV
                 iglo, ighi = 8.0, 12.5
                 ign=f':{iglo},{ighi}:'
-                lwarn()
-                ui.ungroup()
-                ui.ignore(ign)
-                ui.group_snr(fit_grp)
+                lwarn(); ui.ungroup(); ui.ignore(ign)
+                if dofitgrp: ui.group_snr(fit_grp)
                 lwarn()
                 ui.freeze(bkg_mdl)
 
@@ -448,38 +445,36 @@ def do_fit(args):
                 if tot_cnts<xcnt_thresh_min:
                     ui.freeze(auma.width, aumb.width, aula.width, aula_fs.width, aulb.width, nika.width, nikb.width)
                 lwarn() if verbose<2 else linfo()
-                ui.fit(10); lwarn(); ui.notice(); ui.ungroup(); ui.freeze(bkg_mdl)
+                if tofit.init_bkg: ui.fit(10)
+                lwarn(); ui.notice(); ui.ungroup(); ui.freeze(bkg_mdl)
 
                 ##################                
                 # Al-Ka
-                ui.xslorentz.alka;
+                ui.xslorentz.alka
                 set_line('alka', shift=0.5*ig_shift)
-                val= bscl*1.19*nscl
+                val= bscl*1.19
                 ui.set_par(alka.norm, val, min= 0.1*val, max= 10*val)
 
                 # Al-Kb
+                alkb_nom = 1.557
                 ui.xslorentz.alkb
-                alkb.LineE= alka.LineE+0.07095
+                alkb.LineE= alka.LineE + (alkb_nom-alka_nom)
                 alkb.Width= alka.Width
                 alkb.norm=  alka.norm*1e-2
 
                 ## Si-Ka
                 sika.LineE= alka.LineE+sika_nom-alka_nom
                 sika.Width= 0.001
-                val= bkg_lines_scl*bscl*8e-3*nscl
-                ui.set_par(sika.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
+                val= sika.norm.val
+                ui.set_par(sika.norm, val, min= 1e-20, max= alka.norm.val)
 
                 ## Si-Kb
-                sikb.LineE= alka.LineE+sikb_nom-alka_nom
-                sikb.Width= 0.001
-                val= bkg_lines_scl*bscl*5e-3*nscl
-                ui.set_par(sikb.norm, val, min= 1e-20, max= 0.5*alka.norm.val)
                 
                 ##################
                 # Ti-Ka1
                 ui.xslorentz.tika1
                 set_line('tika1', shift=0.9*ig_shift)
-                val= bscl*0.71*nscl
+                val= bscl*0.71
                 ui.set_par(tika1.norm, val= val, min= 1e-20, max= 1e20)
 
                 tika2 = ui.xslorentz.tika2
@@ -498,7 +493,7 @@ def do_fit(args):
                 # Mn-Ka1
                 ui.xslorentz.mnka1
                 set_line('mnka1', shift=ig_shift)
-                val= bscl*2.5*nscl
+                val= bscl*2.5
                 ui.set_par(mnka1.norm, val= val, min= 1e-20, max= 1e20)
 
                 # Mn-Ka2
@@ -525,7 +520,8 @@ def do_fit(args):
                     ui.notice()
                     ui.ungroup()
                     ui.ignore(f':{iglo},{ighi}:')
-                    ui.group_snr(fit_grp)
+                    if dofitgrp:
+                        ui.group_snr(fit_grp)
 
                 def prep_2():
                     lwarn()
@@ -539,8 +535,9 @@ def do_fit(args):
                     ui.fit(1)
                     lwarn()
 
-                def get_line_error(par, rstat_limit, iglo, ighi):
-                    if doerr==1:
+                def get_line_error(par, rstat_limit, iglo, ighi, ckerr):
+                    ui.set_stat('chi2gehrels')
+                    if ckerr:
                         prep_1(iglo, ighi)
                         lerror() if verbose<2 else linfo()
                         try:
@@ -580,12 +577,12 @@ def do_fit(args):
                     prep_1(iglo, ighi)
                     ui.thaw(src_mdl)
                     if tofit.si:
-                        ui.thaw(sika, sikb)
+                        ui.thaw(sika.norm)
                     if tofit.aum:
                         ui.thaw(auma, aumb)
                     if tofit.nika:
                         ui.thaw(nika)
-                    ui.freeze(sika.width, sikb.width, auma.width, aumb.width, nika.width)
+                    ui.freeze(auma.width, aumb.width, nika.width)
                     lwarn() if verbose<2 else linfo()
                     ui.fit(1)
                     prep_2()
@@ -612,7 +609,7 @@ def do_fit(args):
                     ui.thaw(mnka1, mnka2)
                     iglo=mnka1.LineE.val-0.8
                     ighi=mnka1.LineE.val+1.2
-                    (elo,ehi)= get_line_error(mnka1.LineE, 5, iglo, ighi)
+                    (elo,ehi)= get_line_error(mnka1.LineE, 5, iglo, ighi, doerr)
                     if ehi==0.099:
                         doerr=0  ## turn off err if Mn is bad
                     mnka1_elo= elo
@@ -625,7 +622,7 @@ def do_fit(args):
                     ## Mnb errors
                     iglo=mnkb.LineE.val-1.2
                     ighi=mnkb.LineE.val+0.5
-                    (elo,ehi)= get_line_error(mnkb.LineE, 5, iglo, ighi)
+                    (elo,ehi)= get_line_error(mnkb.LineE, 5, iglo, ighi, doerr)
                     mnkb_elo= elo
                     mnkb_ehi= ehi
                     prep_2()
@@ -654,7 +651,7 @@ def do_fit(args):
                     ## Tia errors
                     iglo=tika1.LineE.val-0.4
                     ighi=tika1.LineE.val+0.4
-                    (elo,ehi)= get_line_error(tika1.LineE, 5, iglo, ighi)
+                    (elo,ehi)= get_line_error(tika1.LineE, 5, iglo, ighi, doerr)
                     tika1_elo= elo
                     tika1_ehi=ehi
 
@@ -664,7 +661,7 @@ def do_fit(args):
                     ui.freeze(tikb.width)
                     iglo=tikb.LineE.val-0.4
                     ighi=tikb.LineE.val+0.4
-                    (elo,ehi)= get_line_error(tikb.LineE, 5, iglo, ighi)
+                    (elo,ehi)= get_line_error(tikb.LineE, 5, iglo, ighi, doerr)
                     tikb_elo, tikb_ehi = elo, ehi
                     prep_2()
                 else:
@@ -675,19 +672,17 @@ def do_fit(args):
                 if tofit.al:
                     ##----------
                     ## untie Si from Al
-                    sika.LineE= alka.LineE.val +sika_nom-alka_nom; sika.Width= alka.width.val; sika.norm= sika.norm.val
-                    sikb.LineE= alka.LineE.val +sikb_nom-alka_nom; sikb.Width= alka.width.val; sikb.norm= sikb.norm.val                    
+                    sika.LineE= alka.LineE.val + (sika_nom-alka_nom); sika.Width= alka.width.val
                     ## Al-only tight window fwhm
                     prep_1(ig.al[0], ig.al[1])
                     ui.freeze(src_mdl,bkg_mdl)
                     ui.thaw(alka, alkb)
-                    ui.freeze(alka.width)
                     fit_1()
 
                     ## Al errors
                     iglo=alka.LineE.val-0.4
                     ighi=alka.LineE.val+0.4
-                    (elo,ehi)= get_line_error(alka.LineE, 5, iglo, ighi)
+                    (elo,ehi)= get_line_error(alka.LineE, 5, iglo, ighi, doerr)
                     alka_elo= elo
                     alka_ehi=ehi
                 else:
@@ -695,18 +690,13 @@ def do_fit(args):
 
                 ## SiK fits                    
                 if tofit.si:
-                    val= alka.LineE.val +sika_nom-alka_nom; ui.set_par(sika.LineE, val, min= val-0.04, max= val+0.04)
-                    if sika.norm.val<1e-5*alka.norm.val: sika.norm.val= 2e-5*alka.norm.val ##changed '>' to '<' 5/13/2026
-                    val= sika.norm.val; ui.set_par(sika.norm, val, min=1e-5*alka.norm.val, max=0.5*alka.norm.val)
+                    val= alka.LineE.val + (sika_nom-alka_nom); ui.set_par(sika.LineE, val, min= val-0.02, max= val+0.02)
+                    val= max(sika.norm.val, 0.5*alka.norm.val); ui.set_par(sika.norm, val, min=1e-5*alka.norm.val, max=alka.norm.val)
 
-                    val= alka.LineE.val +sikb_nom-alka_nom; ui.set_par(sikb.LineE, val, min= val-0.04, max= val+0.04)
-                    if sikb.norm.val>1e-5*alka.norm.val: sikb.norm.val= 2e-5*alka.norm.val
-                    val= sikb.norm.val; ui.set_par(sikb.norm, val, min=1e-5*alka.norm.val, max=0.5*alka.norm.val)
-                    
                     ig.si[0] = sika.LineE.val-0.2
                     ig.si[1] = sika.LineE.val+0.2
                     prep_1(ig.si[0], ig.si[1])
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(sika); ui.freeze(sika.width)
+                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(sika.norm, sika.LineE)
                     fit_1()
 
                     ## SiKa errors
@@ -718,24 +708,10 @@ def do_fit(args):
                     else:
                         elo=-0.099; ehi=0.099
                     sika_elo= elo; sika_ehi=ehi
-
-                    ig.si[0] = sikb.LineE.val-0.2
-                    ig.si[1] = sikb.LineE.val+0.2
-                    prep_1(ig.si[0], ig.si[1])
-                    ui.freeze(src_mdl,bkg_mdl); ui.thaw(sikb); ui.freeze(sikb.width)
-                    fit_1()
-
-                    ## SiKb errors
-                    if tot_cnts>xcnt_thresh_min:
-                        iglo=sikb.LineE.val-0.4; ighi=sikb.LineE.val+0.4
-                        (elo,ehi)= get_line_error(sikb.LineE, 2.5, *ig.si)
-                    else:
-                        elo=-0.099; ehi=0.099
-                    sikb_elo= elo; sikb_ehi=ehi
                     prep_2()
                 else:
                     sika_elo= -0.099; sika_ehi=0.099; sikb_elo= -0.099; sikb_ehi=0.099
-                    
+
                 #################
                 if tofit.aum and tot_cnts>xcnt_thresh_min:
                     ##----------
@@ -750,7 +726,7 @@ def do_fit(args):
 
                     ## Au-Ma errors
                     if alka_ehi!=0.099:
-                        (elo,ehi)= get_line_error(auma.LineE, 2.5, aum_iglo, aum_ighi)
+                        (elo,ehi)= get_line_error(auma.LineE, 2.5, aum_iglo, aum_ighi, doerr)
                     else:
                         elo=-0.099; ehi=0.099
                     auma_elo= elo; auma_ehi=ehi
@@ -763,7 +739,7 @@ def do_fit(args):
                     fit_1()
                     ## Au-Mb errors
                     if alka_ehi!=0.099:
-                        (elo,ehi)= get_line_error(aumb.LineE, 2.5, aum_iglo, aum_ighi)
+                        (elo,ehi)= get_line_error(aumb.LineE, 2.5, aum_iglo, aum_ighi, doerr)
                     else:
                         elo=-0.099; ehi=0.099
                     aumb_elo= elo; aumb_ehi=ehi
@@ -781,7 +757,7 @@ def do_fit(args):
 
                     ## NiKa errors
                     if alka_ehi!=0.099 and tot_cnts>xcnt_thresh_min:
-                        (elo,ehi)= get_line_error(nika.LineE, 2.5, ni_iglo, ni_ighi)
+                        (elo,ehi)= get_line_error(nika.LineE, 2.5, ni_iglo, ni_ighi, doerr)
                     else:
                         elo=-0.099; ehi=0.099
                     nika_elo= elo; nika_ehi=ehi
@@ -814,7 +790,7 @@ def do_fit(args):
                     fit_1()
 
                     ## Au-La errors
-                    (elo,ehi)= get_line_error(aula.LineE, 2.5, aula_iglo, aula_ighi)
+                    (elo,ehi)= get_line_error(aula.LineE, 2.5, aula_iglo, aula_ighi, doerr)
                     aula_elo= elo; aula_ehi=ehi
                 else:
                     aula_elo= -0.099; aula_ehi=0.099
@@ -832,7 +808,7 @@ def do_fit(args):
 
                     ## Au-La fs errors
                     if tot_cnts>xcnt_thresh_min:
-                        (elo,ehi)= get_line_error(aula_fs.LineE, 2.5, aula_fs_iglo, aula_fs_ighi)
+                        (elo,ehi)= get_line_error(aula_fs.LineE, 2.5, aula_fs_iglo, aula_fs_ighi, doerr)
                     else:
                         elo=-0.099; ehi=0.099
                     aula_fs_elo= elo; aula_fs_ehi=ehi
@@ -848,7 +824,7 @@ def do_fit(args):
 
                     ## Au-Lb errors
                     if tot_cnts>xcnt_thresh_min:
-                        (elo,ehi)= get_line_error(aulb.LineE, 2.5, aulb_iglo, aulb_ighi)
+                        (elo,ehi)= get_line_error(aulb.LineE, 2.5, aulb_iglo, aulb_ighi, doerr)
                     else:
                         elo=-0.099; ehi=0.099
                     aulb_elo= elo; aulb_ehi= ehi
@@ -860,7 +836,6 @@ def do_fit(args):
                 #plt_me()
                 lines = NamedLines(alka=alka,
                                  sika=sika,
-                                 sikb=sikb,
                                  tika1=tika1,
                                  tikb=tikb,
                                  mnka1=mnka1,
@@ -874,7 +849,6 @@ def do_fit(args):
                                  )
                 nom = NamedLines(alka=alka_nom,
                                  sika=sika_nom,
-                                 sikb=sikb_nom,
                                  tika1=tika1_nom,
                                  tikb=tikb_nom,
                                  mnka1=mnka1_nom,
@@ -888,7 +862,6 @@ def do_fit(args):
                                  )
                 elo = NamedLines(alka=alka_elo,
                                  sika=sika_elo,
-                                 sikb=sikb_elo,
                                  tika1=tika1_elo,
                                  tikb=tikb_elo,
                                  mnka1=mnka1_elo,
@@ -902,7 +875,6 @@ def do_fit(args):
                                  )
                 ehi = NamedLines(alka=alka_ehi,
                                  sika=sika_ehi,
-                                 sikb=sikb_ehi,
                                  tika1=tika1_ehi,
                                  tikb=tikb_ehi,
                                  mnka1=mnka1_ehi,
@@ -967,11 +939,19 @@ def do_fit(args):
                     opentxt+=1
 
                 if tot_cnts>cnt_thresh:
-                    ## get det_gain PHA conversion
-                    idx_list,= np.where( (dg_ccd==ccd_id) & (dg_xl>=xl) & (dg_xl<max(xh,xl+32)) & (dg_yl>=yl) & (dg_yl<max(yh,yl+32)) )
+                    ## get det_gain PHA conversion, 32x32 resolution minimum
+                    ## round to nearest 32x32 tile
+                    dgtest_xl= 1+int(32 * round(float(xl)/32))
+                    if dgtest_xl==1025: dgtest_xl= 993
+                    dgtest_yl= 1+int(32 * round(float(yl)/32))
+                    if dgtest_yl==1025: dgtest_yl= 993
+
+                    idx_list,= np.where((dg_ccd==ccd_id) & (dg_xl>=dgtest_xl) & (dg_xl<max(dgtest_xl+xbin,dgtest_xl+32)) & (dg_yl>=dgtest_yl) & (dg_yl<max(dgtest_yl+ybin,dgtest_yl+32)))
+                    idx_num= idx_list.size
+
                     dg_alka=[]; dg_tika1=[]; dg_tikb=[]; dg_mnka1=[]; dg_mnkb=[]
                     dg_sika=[]; dg_auma=[]; dg_aumb=[]; dg_nika=[]; dg_aula=[]; dg_aula_fs=[]; dg_aulb=[]
-                    for i in range(0,idx_list.size):
+                    for i in range(idx_num):
                         idx=idx_list[i]
                         nrg0= nrg[idx,:]; pha0= pha[idx,:]
                         nz= np.where(nrg0>0)
@@ -1157,8 +1137,11 @@ def plot_fit(*fit_args):
                format(1e3*(line.alka.LineE.val-nom.alka),1e3*ehi.alka,1e3*elo.alka), va='bottom', ha='center',fontsize=8)
     ax[0].text(line.sika.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
                format(1e3*(line.sika.LineE.val-nom.sika),1e3*ehi.sika,1e3*elo.sika), va='bottom', ha='center',fontsize=8, c='grey')
-    ax[0].text(line.sikb.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-               format(1e3*(line.sikb.LineE.val-nom.sikb),1e3*ehi.sikb,1e3*elo.sikb), va='bottom', ha='center',fontsize=8, c='grey') 
+    ##
+    ax[0].text(line.auma.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.auma.LineE.val-nom.auma),1e3*ehi.auma,1e3*elo.auma), va='bottom', ha='center',fontsize=8, c='grey')
+    ax[0].text(line.aumb.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
+               format(1e3*(line.aumb.LineE.val-nom.aumb),1e3*ehi.aumb,1e3*elo.aumb), va='bottom', ha='center',fontsize=8, c='grey')
     ##
     ax[0].text(line.tika1.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
                format(1e3*(line.tika1.LineE.val-nom.tika1),1e3*ehi.tika1,1e3*elo.tika1), va='bottom', ha='center',fontsize=8)
@@ -1169,11 +1152,6 @@ def plot_fit(*fit_args):
                format(1e3*(line.mnka1.LineE.val-nom.mnka1),1e3*ehi.mnka1,1e3*elo.mnka1), va='bottom', ha='center',fontsize=8)
     ax[0].text(line.mnkb.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
                format(1e3*(line.mnkb.LineE.val-nom.mnkb),1e3*ehi.mnkb,1e3*elo.mnkb), va='bottom', ha='center',fontsize=8, c='grey')
-    ##
-    ax[0].text(line.auma.LineE.val,yaxl*line1,'{:.0f} +{:.0f}/{:.0f}'.
-               format(1e3*(line.auma.LineE.val-nom.auma),1e3*ehi.auma,1e3*elo.auma), va='bottom', ha='center',fontsize=8, c='grey')
-    ax[0].text(line.aumb.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
-               format(1e3*(line.aumb.LineE.val-nom.aumb),1e3*ehi.aumb,1e3*elo.aumb), va='bottom', ha='center',fontsize=8, c='grey')
     ##
     ax[0].text(line.nika.LineE.val,yaxl*line2,'{:.0f} +{:.0f}/{:.0f}'.
                format(1e3*(line.nika.LineE.val-nom.nika),1e3*ehi.nika,1e3*elo.nika), va='bottom', ha='center',fontsize=8, c='grey')

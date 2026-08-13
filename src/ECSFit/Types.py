@@ -1,7 +1,7 @@
 from collections import namedtuple
 
 '''Used to pass various values by attribute to fit_plot().'''
-lines='alka sika sikb tika1 tikb mnka1 mnkb nika nikb aula aulb auma aumb'
+lines='alka sika tika1 tikb mnka1 mnkb nika nikb aula aulb auma aumb'
 NamedLines = namedtuple('NamedLines', lines)
 
 ''' hold ignore limits [lower, upper] for each of the given lines.'''
